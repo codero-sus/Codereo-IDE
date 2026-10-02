@@ -230,3 +230,38 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .assistant-profile-row button { display: grid; place-items: center; height: 24px; border: 1px solid rgba(183,239,145,.11); border-radius: 3px; color: #a6c48f; background: rgba(183,239,145,.035); cursor: pointer; }
 .memory-recall-control { display: flex; align-items: center; gap: 2px; color: #82907e; font-size: 6px; cursor: pointer; }
 .memory-recall-control input { width: 11px; height: 11px; margin: 0; }
+
+.search-result-row { display: flex; width: 100%; min-width: 0; align-items: flex-start; gap: 7px; padding: 7px 9px; border: 0; border-bottom: 1px solid rgba(255,255,255,.035); color: #b2b9ae; background: transparent; text-align: left; cursor: pointer; }
+.search-result-row:hover, .search-result-row.active { background: rgba(183,239,145,.055); }
+.search-result-row > svg { flex: 0 0 14px; margin-top: 1px; }
+.search-result-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.search-result-copy strong { overflow: hidden; color: #bac5b4; font: 7px/1.35 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.search-result-copy small { display: -webkit-box; overflow: hidden; color: #778174; font: 6px/1.5 var(--mono); overflow-wrap: anywhere; -webkit-box-orient: vertical; -webkit-line-clamp: 3; }
+.search-empty-state { padding: 14px 10px; color: #778174; font-size: 7px; line-height: 1.6; }
+.repo-atlas-heading { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin: 4px 0 8px; padding: 9px; border: 1px solid rgba(183,239,145,.12); border-radius: 5px; background: linear-gradient(135deg, rgba(183,239,145,.055), rgba(255,255,255,.015)); }
+.repo-atlas-heading > div { display: flex; min-width: 0; flex-direction: column; gap: 4px; }
+.repo-atlas-heading small { color: #82937c; font: 6px var(--mono); letter-spacing: .1em; }
+.repo-atlas-heading strong { overflow: hidden; color: #c8d8c1; font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.repo-atlas-heading > span { flex: 0 0 auto; color: #92a387; font: 6px var(--mono); }
+.repo-atlas-stats { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 5px; margin-bottom: 8px; }
+.repo-atlas-stats > div { display: flex; flex-direction: column; gap: 3px; padding: 7px 6px; border: 1px solid rgba(255,255,255,.05); border-radius: 4px; background: rgba(255,255,255,.018); }
+.repo-atlas-stats strong { color: #b9cfaa; font: 10px var(--mono); }
+.repo-atlas-stats small { color: #7b8576; font-size: 6px; }
+.repo-atlas-card { margin: 7px 0; padding: 7px; border: 1px solid rgba(255,255,255,.05); border-radius: 5px; background: rgba(255,255,255,.016); }
+.repo-atlas-card > .mind-form-title { margin-top: 0; }
+.repo-atlas-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 5px; }
+.repo-atlas-chips > span { padding: 3px 5px; border: 1px solid rgba(183,239,145,.12); border-radius: 3px; color: #a9c691; background: rgba(183,239,145,.035); font-size: 6px; }
+.repo-atlas-chips > small, .repo-atlas-muted { color: #768073; font-size: 6px; line-height: 1.5; }
+.repo-language-list { display: flex; flex-direction: column; }
+.repo-language-list > div, .repo-atlas-script { display: flex; justify-content: space-between; gap: 6px; padding: 4px 0; border-top: 1px solid rgba(255,255,255,.035); color: #9aa496; font-size: 7px; }
+.repo-language-list small { color: #758071; font: 6px var(--mono); }
+.repo-atlas-file, .repo-atlas-directory { display: flex; width: 100%; min-width: 0; align-items: center; gap: 5px; padding: 5px 2px; border: 0; border-top: 1px solid rgba(255,255,255,.035); color: #a4b19e; background: transparent; text-align: left; cursor: pointer; }
+.repo-atlas-file:hover, .repo-atlas-directory:hover { color: #d3e7c6; background: rgba(183,239,145,.035); }
+.repo-atlas-file > span, .repo-atlas-directory > span { flex: 1; min-width: 0; overflow: hidden; font: 6px/1.4 var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.repo-atlas-file > small, .repo-atlas-directory > small { flex: 0 0 auto; color: #768174; font: 6px var(--mono); }
+.repo-atlas-script { flex-direction: column; gap: 3px; }
+.repo-atlas-script strong { color: #a8bd9b; font: 7px var(--mono); }
+.repo-atlas-script code { overflow-wrap: anywhere; color: #899485; font: 6px/1.5 var(--mono); }
+.repo-atlas-guidance { padding: 5px 0; }
+.repo-atlas-guidance strong { color: #a8bd9b; font: 6px var(--mono); }
+.repo-atlas-guidance p { margin: 4px 0; color: #8a9486; font-size: 6px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }

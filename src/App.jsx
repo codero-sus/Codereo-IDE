@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import CodeMirror from '@uiw/react-codemirror';
 import { javascript } from '@codemirror/lang-javascript';
 import { css } from '@codemirror/lang-css';
@@ -54,6 +54,7 @@ import {
   Zap,
 } from 'lucide-react';
 import MindPanel from './MindPanel.jsx';
+import { rankWorkspaceFiles, searchWorkspace } from './workspace-index.mjs';
 import './styles.css';
 
 const STORAGE_KEY = 'codereo.ide.workspace.v1';
@@ -239,18 +240,8 @@ function inferValidationCommands(files) {
   return [...new Set(commands)].slice(0, 3);
 }
 
-function buildAssistantContextFiles(files, preferredPaths = []) {
-  const paths = [...new Set([...preferredPaths, 'package.json', 'README.md', ...Object.keys(files)])];
-  let remaining = 64_000;
-  const context = [];
-  for (const path of paths) {
-    const content = files[path];
-    if (typeof content !== 'string' || remaining <= 0 || context.length >= 40) continue;
-    const excerpt = content.slice(0, Math.min(10_000, remaining));
-    context.push({ path, content: excerpt });
-    remaining -= excerpt.length;
-  }
-  return context;
+function buildAssistantContextFiles(files, preferredPaths = [], query = '') {
+  return rankWorkspaceFiles(files, query, { preferredPaths });
 }
 
 function timeLabel() {
@@ -264,6 +255,7 @@ function App() {
   const [workspaceName, setWorkspaceName] = useState('codereo-starter');
   const [desktopWorkspaceRoot, setDesktopWorkspaceRoot] = useState('');
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
+  const [pendingSearchLocation, setPendingSearchLocation] = useState(null);
   const [openTabs, setOpenTabs] = useState(['index.html', 'src/main.js', 'src/style.css']);
   const [viewMode, setViewMode] = useState('code');
   const [previewDocument, setPreviewDocument] = useState(() => buildPreviewDocument(readWorkspace()));
@@ -277,6 +269,7 @@ function App() {
   const [activeActivity, setActiveActivity] = useState('explorer');
   const [expandedFolders, setExpandedFolders] = useState(() => new Set(['src']));
   const [fileSearch, setFileSearch] = useState('');
+  const deferredFileSearch = useDeferredValue(fileSearch);
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
@@ -308,6 +301,7 @@ function App() {
     },
   ]);
   const paletteInputRef = useRef(null);
+  const editorViewRef = useRef(null);
   const terminalInputRef = useRef(null);
   const chatInputRef = useRef(null);
 
@@ -451,6 +445,22 @@ function App() {
     setOpenTabs((tabs) => tabs.includes(filePath) ? tabs : [...tabs, filePath]);
   }, []);
 
+  const openSearchResult = (result) => {
+    openFile(result.path);
+    setPendingSearchLocation(result.line ? { path: result.path, line: result.line } : null);
+  };
+
+  useEffect(() => {
+    const view = editorViewRef.current;
+    if (!pendingSearchLocation || pendingSearchLocation.path !== activeFile || viewMode !== 'code' || !view) return;
+    const lineNumber = Math.min(Math.max(1, pendingSearchLocation.line), view.state.doc.lines);
+    const line = view.state.doc.line(lineNumber);
+    view.dispatch({ selection: { anchor: line.from }, scrollIntoView: true });
+    view.focus();
+    setCursorPosition({ line: lineNumber, column: 1 });
+    setPendingSearchLocation(null);
+  }, [pendingSearchLocation, activeFile, viewMode, files]);
+
   const openWorkspace = useCallback(async () => {
     const bridge = window.codereoDesktop;
     if (!bridge?.isAvailable) {
@@ -578,7 +588,7 @@ function App() {
           agentId: activeAgentId,
           includeMemory: memoryEnabled,
           messages: outgoingMessages,
-          files: buildAssistantContextFiles(files, [activeFile, ...openTabs]),
+          files: buildAssistantContextFiles(files, [activeFile, ...openTabs], prompt),
         }),
       });
       const data = await response.json().catch(() => ({}));
@@ -689,7 +699,7 @@ function App() {
               agentId: activeAgentId,
               includeMemory: memoryEnabled,
               messages: agentHistory,
-              files: buildAssistantContextFiles(workingFiles, [firstPath, activeFile, ...openTabs]),
+              files: buildAssistantContextFiles(workingFiles, [firstPath, activeFile, ...openTabs], agentHistory.at(-1)?.content || taskPrompt),
             }),
           });
           const data = await response.json().catch(() => ({}));
@@ -813,13 +823,25 @@ function App() {
     );
   });
 
-  const filteredTree = fileSearch.trim()
-    ? allFilePaths.filter((filePath) => filePath.toLowerCase().includes(fileSearch.toLowerCase())).map((filePath) => (
-      <button key={filePath} className={`tree-row file-row ${activeFile === filePath && viewMode === 'code' ? 'active' : ''}`} onClick={() => openFile(filePath)}>
-        <IconForFile name={filePath} /><span className="tree-file-name">{filePath}</span>
-      </button>
-    ))
-    : renderTree(fileTree);
+  const contentSearchResults = useMemo(() => searchWorkspace(files, deferredFileSearch, 40), [files, deferredFileSearch]);
+  const filteredTree = activeActivity === 'search'
+    ? deferredFileSearch.trim()
+      ? contentSearchResults.length
+        ? contentSearchResults.map((result) => (
+          <button key={`${result.path}:${result.line}`} className={`search-result-row ${activeFile === result.path && viewMode === 'code' ? 'active' : ''}`} onClick={() => openSearchResult(result)}>
+            <IconForFile name={result.path} />
+            <span className="search-result-copy"><strong title={result.path}>{result.path}</strong><small>{result.line ? `Line ${result.line}` : 'Path match'} · {result.excerpt}</small></span>
+          </button>
+        ))
+        : <div className="search-empty-state">No code or path matches for “{deferredFileSearch}”.</div>
+      : renderTree(fileTree)
+    : fileSearch.trim()
+      ? allFilePaths.filter((filePath) => filePath.toLowerCase().includes(fileSearch.toLowerCase())).map((filePath) => (
+        <button key={filePath} className={`tree-row file-row ${activeFile === filePath && viewMode === 'code' ? 'active' : ''}`} onClick={() => openFile(filePath)}>
+          <IconForFile name={filePath} /><span className="tree-file-name">{filePath}</span>
+        </button>
+      ))
+      : renderTree(fileTree);
 
   return (
     <div className={`app-shell ${assistantVisible ? '' : 'assistant-hidden'}`}>
@@ -880,7 +902,7 @@ function App() {
                 </div>
               </div>
               {activeActivity === 'search' && (
-                <div className="search-files-wrap"><Search size={14} /><input className="file-search-input" value={fileSearch} onChange={(event) => setFileSearch(event.target.value)} placeholder="Filter files" /></div>
+                <div className="search-files-wrap"><Search size={14} /><input className="file-search-input" value={fileSearch} onChange={(event) => setFileSearch(event.target.value)} placeholder="Search code and paths" /></div>
               )}
               <div className="workspace-folder-row">
                 <ChevronDown size={13} /><span className="workspace-folder-name">CODEREO-STARTER</span>
@@ -893,7 +915,7 @@ function App() {
               </div>
             </>
           ) : activeActivity === 'mind' ? (
-            <MindPanel selectedAgentId={activeAgentId} onSelectAgent={selectAgent} memoryEnabled={memoryEnabled} onMemoryToggle={updateMemoryEnabled} onStateChange={setMindState} />
+            <MindPanel files={files} workspaceName={workspaceName} onOpenFile={openFile} selectedAgentId={activeAgentId} onSelectAgent={selectAgent} memoryEnabled={memoryEnabled} onMemoryToggle={updateMemoryEnabled} onStateChange={setMindState} />
           ) : activeActivity === 'source' ? (
             <div className="utility-panel">
               <div className="panel-title-row"><span>SOURCE CONTROL</span><button className="mini-icon-button" onClick={() => setActiveActivity('explorer')}><X size={14} /></button></div>
@@ -956,6 +978,7 @@ function App() {
                   height="100%"
                   theme={oneDark}
                   extensions={[getLanguage(activeFile)]}
+                  onCreateEditor={(view) => { editorViewRef.current = view; }}
                   onChange={(value) => updateFile(activeFile, value)}
                   onUpdate={(update) => {
                     const head = update.state.selection.main.head;

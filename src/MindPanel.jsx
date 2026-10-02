@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, BookOpen, BrainCircuit, Check, Circle, Download, FileUp, LoaderCircle, Plus, Search, Sparkles, Trash2, Users, X } from 'lucide-react';
+import { buildRepoWiki } from './workspace-index.mjs';
+import { AlertCircle, BookOpen, BrainCircuit, Check, ChevronRight, Circle, Download, FileUp, FolderOpen, LoaderCircle, Network, Plus, Search, Sparkles, Trash2, Users, X } from 'lucide-react';
 
 const CAPABILITIES = [
   ['read-workspace', 'Read project context'],
@@ -23,7 +24,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value));
 }
 
-export default function MindPanel({ selectedAgentId, onSelectAgent, memoryEnabled, onMemoryToggle, onStateChange }) {
+export default function MindPanel({ files, workspaceName, onOpenFile, selectedAgentId, onSelectAgent, memoryEnabled, onMemoryToggle, onStateChange }) {
   const [state, setState] = useState(EMPTY_STATE);
   const [tab, setTab] = useState('memory');
   const [busy, setBusy] = useState(false);
@@ -45,6 +46,7 @@ export default function MindPanel({ selectedAgentId, onSelectAgent, memoryEnable
   const [researchQuery, setResearchQuery] = useState('');
   const [researchResults, setResearchResults] = useState([]);
   const selectedProfile = state.agents.find((agent) => agent.id === selectedAgentId);
+  const repo = useMemo(() => buildRepoWiki(files || {}, workspaceName), [files, workspaceName]);
   const profileCanUseMemory = selectedProfile ? selectedProfile.capabilities.includes('use-memory') : selectedAgentId === 'operator';
 
   const reload = useCallback(async () => {
@@ -132,12 +134,13 @@ export default function MindPanel({ selectedAgentId, onSelectAgent, memoryEnable
   };
 
   const tabs = useMemo(() => [
+    { id: 'repo', label: 'Repo', icon: Network, count: repo.fileCount },
     { id: 'memory', label: 'Memory', icon: BrainCircuit, count: state.memoryCount },
     { id: 'agents', label: 'Agents', icon: Users, count: state.agents.length },
     { id: 'desk', label: 'Desk', icon: BookOpen, count: state.tasks.filter((task) => !task.done).length },
     { id: 'research', label: 'Research', icon: Search },
     { id: 'import', label: 'Import', icon: FileUp },
-  ], [state]);
+  ], [state, repo]);
 
   return (
     <section className="mind-panel">
@@ -148,6 +151,46 @@ export default function MindPanel({ selectedAgentId, onSelectAgent, memoryEnable
 
       {error && <div className="mind-message mind-error"><AlertCircle size={13} />{error}</div>}
       {notice && !error && <div className="mind-message"><Check size={13} />{notice}</div>}
+
+      {tab === 'repo' && <div className="mind-section repo-atlas-section">
+        <div className="mind-intro"><Network size={14} /><span>Repo Atlas is generated locally from source paths, manifests, and imports. It refreshes as your workspace changes.</span></div>
+        <div className="repo-atlas-heading"><div><small>PROJECT MAP</small><strong>{repo.name}</strong></div><span>{repo.fileCount} files</span></div>
+        <div className="repo-atlas-stats"><div><strong>{repo.languages.length}</strong><small>languages</small></div><div><strong>{repo.importCount}</strong><small>local links</small></div><div><strong>{Math.ceil(repo.characterCount / 1000).toLocaleString()}</strong><small>k chars indexed</small></div></div>
+
+        <section className="repo-atlas-card"><div className="mind-form-title">STACK SIGNALS</div>
+          <div className="repo-atlas-chips">{repo.frameworks.length ? repo.frameworks.map((item) => <span key={item}>{item}</span>) : <small>No framework manifest detected.</small>}</div>
+          <div className="repo-language-list">{repo.languages.slice(0, 8).map((language) => <div key={language.name}><span>{language.name}</span><small>{language.count} files</small></div>)}</div>
+        </section>
+
+        <section className="repo-atlas-card"><div className="mind-form-title">ENTRY POINTS</div>
+          {repo.entrypoints.length ? repo.entrypoints.map((filePath) => <button className="repo-atlas-file" key={filePath} onClick={() => onOpenFile?.(filePath)}><span>{filePath}</span><ChevronRight size={12} /></button>) : <small className="repo-atlas-muted">No common entry point found in the loaded workspace.</small>}
+        </section>
+
+        <section className="repo-atlas-card"><div className="mind-form-title">DIRECTORY MAP</div>
+          {repo.directories.map((directory) => {
+            const firstFile = Object.keys(files || {}).find((filePath) => directory.path === '(project root)' ? !filePath.includes('/') : filePath.startsWith(`${directory.path}/`));
+            return <button className="repo-atlas-directory" key={directory.path} onClick={() => firstFile && onOpenFile?.(firstFile)}><FolderOpen size={12} /><span>{directory.path}</span><small>{directory.count}</small></button>;
+          })}
+        </section>
+
+        {repo.keyModules.length > 0 && <section className="repo-atlas-card"><div className="mind-form-title">MOST-REFERENCED LOCAL MODULES</div>
+          {repo.keyModules.map((module) => <button className="repo-atlas-file" key={module.path} onClick={() => onOpenFile?.(module.path)}><span>{module.path}</span><small>{module.references} refs</small></button>)}
+        </section>}
+
+        {repo.scripts.length > 0 && <section className="repo-atlas-card"><div className="mind-form-title">PROJECT SCRIPTS</div>
+          {repo.scripts.map((script) => <div className="repo-atlas-script" key={script.label}><strong>{script.label}</strong><code>{script.command}</code></div>)}
+        </section>}
+
+        {repo.configurationFiles.length > 0 && <section className="repo-atlas-card"><div className="mind-form-title">MANIFESTS & CONFIG</div>
+          {repo.configurationFiles.map((filePath) => <button className="repo-atlas-file" key={filePath} onClick={() => onOpenFile?.(filePath)}><span>{filePath}</span><ChevronRight size={12} /></button>)}
+        </section>}
+
+        {repo.instructions.length > 0 && <section className="repo-atlas-card"><div className="mind-form-title">PROJECT GUIDANCE</div>
+          {repo.instructions.map((instruction) => <article className="repo-atlas-guidance" key={instruction.path}><strong>{instruction.path}</strong><p>{instruction.preview || 'No text content.'}</p></article>)}
+          <small className="repo-atlas-muted">Guidance files can shape code conventions for the assistant, but cannot override your request or approval settings.</small>
+        </section>}
+        {!repo.fileCount && <div className="mind-empty-state">Open a desktop folder or create workspace files to build a local repository map.</div>}
+      </div>}
 
       {tab === 'memory' && <div className="mind-section">
         <label className="mind-toggle-row"><span><strong>Recall from memory</strong><small>{profileCanUseMemory ? 'Relevant saved/imported excerpts may be sent with assistant requests.' : 'This specialist profile is not allowed to read saved memory.'}</small></span><input type="checkbox" checked={memoryEnabled} disabled={!profileCanUseMemory} onChange={(event) => onMemoryToggle(event.target.checked)} /></label>
