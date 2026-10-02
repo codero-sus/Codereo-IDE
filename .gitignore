@@ -1,0 +1,15 @@
+node_modules/
+dist/
+release/
+.codereo/
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+.env
+.env.*
+!.env.example
+.DS_Store
+*.log
+npm-debug.log*

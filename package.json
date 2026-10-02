@@ -1,0 +1,73 @@
+{
+  "name": "codereo-ide",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "desktop/main.cjs",
+  "description": "Codereo IDE — a proprietary, agentic coding workspace.",
+  "scripts": {
+    "dev": "node server/index.mjs",
+    "build": "vite build",
+    "start": "node server/index.mjs --production",
+    "desktop": "npm run build && python desktop/main.py",
+    "desktop:dev": "python desktop/main.py --dev",
+    "desktop:electron": "electron desktop/main.cjs",
+    "desktop:electron:package": "npm run build && electron-builder --publish never",
+    "test": "node --test tests/server/api.test.mjs tests/server/mind-store.test.mjs tests/server/research.test.mjs",
+    "test:python": "python -m unittest discover -s tests/python -v"
+  },
+  "dependencies": {
+    "@codemirror/lang-css": "^6.3.1",
+    "@codemirror/lang-html": "^6.4.9",
+    "@codemirror/lang-javascript": "^6.2.2",
+    "@codemirror/lang-json": "^6.0.1",
+    "@codemirror/lang-markdown": "^6.3.2",
+    "@codemirror/lang-python": "^6.2.1",
+    "@codemirror/theme-one-dark": "^6.1.2",
+    "@uiw/react-codemirror": "^4.23.10",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
+    "vite": "^6.0.7"
+  },
+  "build": {
+    "appId": "ai.codereo.ide",
+    "productName": "Codereo IDE",
+    "asar": true,
+    "files": [
+      "dist/**",
+      "server/**",
+      "desktop/**",
+      "package.json",
+      "python/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    },
+    "extraResources": [
+      {
+        "from": "python/codereo_capabilities/chat_importer.py",
+        "to": "codereo_python/chat_importer.py"
+      }
+    ]
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
