@@ -52,7 +52,7 @@ Codereo IDE is a proprietary, agent-first coding workspace for browser and deskt
 - [ ] NV-03 — Navigate to definitions, declarations, and implementations.
 - [ ] NV-04 — Browse references and call hierarchies.
 - [ ] NV-05 — Search files with include and exclude globs.
-- [ ] NV-06 — Search across file contents with context previews.
+- [x] NV-06 — Search across file contents with context previews.
 - [ ] NV-07 — Add a command palette for all IDE actions.
 - [ ] NV-08 — Let users create, edit, and reorder keyboard shortcuts.
 - [ ] NV-09 — Display recent files, symbols, and navigation history.
@@ -168,14 +168,14 @@ Codereo IDE is a proprietary, agent-first coding workspace for browser and deskt
 - [ ] CX-09 — Retrieve relevant code with language-aware ranking.
 - [ ] CX-10 — Include related tests and configuration in task context.
 - [ ] CX-11 — Respect ignore files and configurable context exclusions.
-- [ ] CX-12 — Keep secrets, credentials, and generated files out of context.
+- [x] CX-12 — Keep secrets, credentials, and generated files out of context.
 - [ ] CX-13 — Explain why a file was included in a model request.
 - [ ] CX-14 — Refresh indexes incrementally as files change.
 - [ ] CX-15 — Support large monorepos with package-level context boundaries.
 - [ ] CX-16 — Add dependency-graph and impact-analysis views.
 - [ ] CX-17 — Build a project glossary from symbols and documentation.
 - [ ] CX-18 — Detect stale documentation related to changed code.
-- [ ] CX-19 — Support user-supplied, versioned repository guidance files.
+- [x] CX-19 — Support user-supplied, versioned repository guidance files.
 - [ ] CX-20 — Let users inspect and clear local retrieval indexes.
 
 ## 09 · Code quality, refactoring, and maintenance (20)

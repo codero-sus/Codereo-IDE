@@ -58,14 +58,17 @@ test('Mind API imports chats, gates recalled context, and enforces specialist ca
       OPENAI_MODEL: 'fixture-model',
       OPENAI_API_KEY: 'fixture-secret',
     },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'pipe'],
   });
+  let serverLogs = '';
+  child.stdout.on('data', (chunk) => { serverLogs += chunk.toString(); });
+  child.stderr.on('data', (chunk) => { serverLogs += chunk.toString(); });
   const baseUrl = `http://127.0.0.1:${port}`;
 
   try {
     let ready = false;
     for (let attempt = 0; attempt < 100; attempt += 1) {
-      if (child.exitCode !== null) throw new Error(`API server exited early with code ${child.exitCode}.`);
+      if (child.exitCode !== null) throw new Error(`API server exited early with code ${child.exitCode}: ${serverLogs}`);
       try {
         const response = await fetch(`${baseUrl}/api/health`);
         if (response.ok) { ready = true; break; }
@@ -113,6 +116,7 @@ test('Mind API imports chats, gates recalled context, and enforces specialist ca
         mode: 'agent', agentId: custom.agent.id, includeMemory: true,
         messages: [{ role: 'user', content: 'What is the local network boundary?' }],
         files: [
+          { path: 'AGENTS.md', content: 'Use focused edits and preserve public APIs.' },
           { path: 'src/main.py', content: 'print("trusted project context")' },
           { path: '.env', content: 'DO_NOT_SEND_THIS_SECRET' },
           { path: '.git/config', content: 'DO_NOT_SEND_GIT_CREDENTIALS' },
@@ -126,6 +130,8 @@ test('Mind API imports chats, gates recalled context, and enforces specialist ca
     assert.match(capturedPrompt, /remembered_context/i);
     assert.match(capturedPrompt, /Project boundary/);
     assert.match(capturedPrompt, /trusted project context/);
+    assert.match(capturedPrompt, /project_instructions/i);
+    assert.match(capturedPrompt, /preserve public APIs/);
     assert.doesNotMatch(capturedPrompt, /DO_NOT_SEND/);
     assert.equal(capturedAuthorization, 'Bearer fixture-secret');
 
