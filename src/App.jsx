@@ -56,7 +56,7 @@ import {
   Zap,
 } from 'lucide-react';
 import MindPanel from './MindPanel.jsx';
-import { createChangeReview } from './change-review.mjs';
+import { createChangeReview, findStaleProposalPaths, selectProposalChanges } from './change-review.mjs';
 import { rankWorkspaceFiles, searchWorkspace } from './workspace-index.mjs';
 import './styles.css';
 
@@ -655,18 +655,25 @@ function App() {
   };
 
   const approveAgentTask = async (message) => {
-    const baselines = message.changeBaselines || {};
-    const stalePaths = (message.changes || []).filter(({ path }) => Object.hasOwn(baselines, path)
-      && (baselines[path] === null ? Object.hasOwn(files, path) : files[path] !== baselines[path])).map(({ path }) => path);
+    if (assistantBusy) return;
+    const selectedChanges = selectProposalChanges(message.changes, message.excludedChangePaths);
+    if (!selectedChanges.length) {
+      setToast('Select at least one file change before approving this task.');
+      return;
+    }
+    const stalePaths = findStaleProposalPaths(selectedChanges, message.changeBaselines, files);
     if (stalePaths.length) {
       setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'stale', stalePaths } : item));
       setToast(`Workspace changed after this diff was prepared (${stalePaths.slice(0, 2).join(', ')}). Ask for a fresh patch to review current contents.`);
       return;
     }
-    const validChanges = (message.changes || []).filter(({ path, content }) =>
-      typeof path === 'string' && typeof content === 'string' && !path.startsWith('/') && !path.split('/').includes('..') && !path.split('/').some((part) => part.startsWith('.env'))
+    const validChanges = selectedChanges.filter(({ path, content }) =>
+      typeof content === 'string' && !path.startsWith('/') && !path.split('/').includes('..') && !path.split('/').some((part) => part.startsWith('.env'))
     );
-    if (!validChanges.length || assistantBusy) return;
+    if (!validChanges.length) {
+      setToast('No safe file changes remain in this task.');
+      return;
+    }
 
     let workingFiles = { ...files };
     validChanges.forEach(({ path, content }) => { workingFiles[path] = content; });
@@ -690,6 +697,7 @@ function App() {
 
       const desktopBridge = window.codereoDesktop;
       const selectedAgent = mindState.agents.find((agent) => agent.id === activeAgentId);
+      const excludedPaths = new Set(message.excludedChangePaths || []);
       const agentCanValidate = !selectedAgent || selectedAgent.capabilities.includes('request-validation');
       const canRunDesktopChecks = Boolean(agentCanValidate && desktopWorkspaceRoot && desktopBridge?.isAvailable && desktopBridge.runValidation);
       let commands = (message.commands || []).map((item) => typeof item === 'string' ? item : item.command).filter(Boolean);
@@ -706,7 +714,7 @@ function App() {
           ).join('\n\n');
           agentHistory.push({
             role: 'user',
-            content: `The user approved this task: ${taskPrompt}\n\nI applied the current patch and ran the approved local checks. They failed:\n${outputSummary || verification.message || 'No output was captured.'}\n\nInspect the current workspace and make the smallest useful repair. This task approval covers up to two repair passes. Return the normal JSON agent response; do not suggest commands outside the safe test/build allowlist.`,
+            content: `The user approved this task: ${taskPrompt}\n\n${excludedPaths.size ? `User-excluded paths (keep unchanged and never include in repairs): ${[...excludedPaths].join(', ')}.\n\n` : ''}I applied the current patch and ran the approved local checks. They failed:\n${outputSummary || verification.message || 'No output was captured.'}\n\nInspect the current workspace and make the smallest useful repair. This task approval covers up to two repair passes. Return the normal JSON agent response; do not suggest commands outside the safe test/build allowlist.`,
           });
           const response = await fetch('/api/assistant', {
             method: 'POST',
@@ -723,8 +731,8 @@ function App() {
           const data = await response.json().catch(() => ({}));
           if (!response.ok) throw new Error(data.message || 'The repair pass could not reach the selected provider.');
           agentHistory.push({ role: 'assistant', content: data.message || 'I could not find a safe repair.' });
-          const repairs = (data.changes || []).filter(({ path, content }) =>
-            typeof path === 'string' && typeof content === 'string' && !path.startsWith('/') && !path.split('/').includes('..') && !path.split('/').some((part) => part.startsWith('.env'))
+          const repairs = selectProposalChanges(data.changes, [...excludedPaths]).filter(({ path, content }) =>
+            typeof content === 'string' && !path.startsWith('/') && !path.split('/').includes('..') && !path.split('/').some((part) => part.startsWith('.env'))
           );
           if (!repairs.length) {
             setMessages((current) => [...current, {
@@ -777,6 +785,16 @@ function App() {
 
   const discardProposal = (messageId) => {
     setMessages((current) => current.map((message) => message.id === messageId ? { ...message, proposalState: 'discarded' } : message));
+  };
+
+  const toggleProposalChange = (messageId, filePath) => {
+    setMessages((current) => current.map((message) => {
+      if (message.id !== messageId || ['applied', 'auto-applied', 'discarded', 'running', 'stale', 'needs-attention'].includes(message.proposalState)) return message;
+      const excluded = new Set(message.excludedChangePaths || []);
+      if (excluded.has(filePath)) excluded.delete(filePath);
+      else excluded.add(filePath);
+      return { ...message, excludedChangePaths: [...excluded] };
+    }));
   };
 
   const saveQuestToDesk = async (message) => {
@@ -1135,18 +1153,20 @@ function App() {
                     </section>}
                     {message.changes?.length > 0 && (
                       <div className="proposal-card">
-                        <div className="proposal-heading"><div className="proposal-icon"><FileCode2 size={14} /></div><div><strong>{message.proposalState === 'auto-applied' ? 'Repair applied' : message.spec ? 'Quest patch ready' : 'Agent task ready'}</strong><span>{message.proposalState === 'auto-applied' ? `${message.changes.length} file${message.changes.length === 1 ? '' : 's'} · covered by the original task approval` : `${message.changes.length} file${message.changes.length === 1 ? '' : 's'} · inspect each diff, then approve once`}</span></div></div>
+                        <div className="proposal-heading"><div className="proposal-icon"><FileCode2 size={14} /></div><div><strong>{message.proposalState === 'auto-applied' ? 'Repair applied' : message.spec ? 'Quest patch ready' : 'Agent task ready'}</strong><span>{message.proposalState === 'auto-applied' ? `${message.changes.length} file${message.changes.length === 1 ? '' : 's'} · covered by the original task approval` : `${message.changes.length - (message.excludedChangePaths?.length || 0)} of ${message.changes.length} file${message.changes.length === 1 ? '' : 's'} selected · inspect each diff, then approve once`}</span></div></div>
                         <div className="proposal-files">{message.changes.map((change) => <div className="proposal-file" key={change.path}><IconForFile name={change.path} size={13} /><span>{change.path}</span><span className="proposal-change-label">{message.changeReviews?.[change.path]?.isNewFile ? 'A' : 'M'}</span></div>)}</div>
                         <div className="proposal-diff-list">{message.changes.map((change) => {
                           const review = message.changeReviews?.[change.path] || createChangeReview(message.changeBaselines?.[change.path] ?? null, change.content);
-                          return <section className="proposal-diff-file" key={change.path}>
-                            <div className="proposal-diff-title"><code title={change.path}>{change.path}</code><span><i className="diff-added-count">+{review.added}</i> <i className="diff-removed-count">−{review.removed}</i></span></div>
+                          const included = !(message.excludedChangePaths || []).includes(change.path);
+                          const selectionLocked = ['applied', 'auto-applied', 'discarded', 'running', 'stale', 'needs-attention'].includes(message.proposalState);
+                          return <section className={`proposal-diff-file ${included ? '' : 'excluded'}`} key={change.path}>
+                            <div className="proposal-diff-title"><code title={change.path}>{change.path}</code><label className="proposal-diff-selection" title={`${included ? 'Exclude' : 'Include'} this file ${included ? 'from' : 'in'} the approved task`}><input type="checkbox" checked={included} disabled={assistantBusy || selectionLocked} onChange={() => toggleProposalChange(message.id, change.path)} /><span>Include</span></label><span><i className="diff-added-count">+{review.added}</i> <i className="diff-removed-count">−{review.removed}</i></span></div>
                             <div className="proposal-diff-lines">{review.lines.map((line, index) => <div className={`proposal-diff-line diff-${line.type}`} key={`${line.type}-${index}`}><span>{line.type === 'added' ? '+' : line.type === 'removed' ? '−' : line.type === 'omitted' ? '…' : ' '}</span><code>{line.type === 'omitted' ? `${line.count} lines omitted` : line.text || ' '}</code></div>)}</div>
                           </section>;
                         })}</div>
                         {message.commands?.length > 0 ? <div className="proposal-check-list"><strong>Checks after approval</strong>{message.commands.map((item) => <div key={item.command}><Terminal size={11} /><code>{item.command}</code></div>)}</div> : <div className="proposal-check-hint">After approval, Codereo will detect safe test/build checks in the project and run them in desktop mode.</div>}
                         {message.blockedCommands?.length > 0 && <div className="blocked-command-note"><strong>Requires explicit approval · never auto-run</strong>{message.blockedCommands.map((command, index) => <div className="blocked-command-row" key={`${command}-${index}`}><code title={command}>{command}</code>{window.codereoDesktop?.runConfirmedCommand ? <button type="button" disabled={assistantBusy || !desktopWorkspaceRoot} title={!desktopWorkspaceRoot ? 'Open a desktop workspace first' : 'Review in the desktop confirmation dialog'} onClick={() => runConfirmedAgentCommand(message.id, command)}>Review &amp; run</button> : <span>Desktop only</span>}</div>)}{message.manualCommandResults?.map((result, index) => <div className="manual-command-result" key={`${result.command}-${index}`}><span className={result.ok ? 'check-pass' : result.canceled ? '' : 'check-fail'}>{result.canceled ? 'Canceled' : result.timedOut ? 'Timed out' : result.ok ? 'Finished' : `Exit ${result.exitCode ?? -1}`}</span><code>{result.command}</code><pre>{result.output || (result.ok ? 'Command completed.' : '')}</pre></div>)}</div>}
-                        {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'stale' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Workspace files changed after review{message.stalePaths?.length ? `: ${message.stalePaths.join(', ')}` : ''}. Request a fresh patch before applying.</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy} onClick={() => approveAgentTask(message)}><Check size={13} /> Approve task & verify</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
+                        {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'stale' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Workspace files changed after review{message.stalePaths?.length ? `: ${message.stalePaths.join(', ')}` : ''}. Request a fresh patch before applying.</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy || message.changes.length <= (message.excludedChangePaths?.length || 0)} onClick={() => approveAgentTask(message)}><Check size={13} /> Approve {message.changes.length - (message.excludedChangePaths?.length || 0)} file{message.changes.length - (message.excludedChangePaths?.length || 0) === 1 ? '' : 's'} & verify</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
                         {message.verification && <div className={`verification-card ${message.verification.ok ? 'passed' : 'failed'}`}><strong>{message.verification.ok ? 'Verification' : 'Checks need attention'}</strong>{message.verification.message && <p>{message.verification.message}</p>}{(message.verification.results || []).map((result, index) => <div className="verification-result" key={`${result.command}-${index}`}><span className={result.exitCode === 0 ? 'check-pass' : 'check-fail'}>{result.exitCode === 0 ? 'PASS' : 'FAIL'}</span><code>{result.command}</code>{result.output && <pre>{result.output.slice(0, 1600)}</pre>}</div>)}</div>}
                       </div>
                     )}

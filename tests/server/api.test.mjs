@@ -47,7 +47,7 @@ test('Mind API imports chats, gates recalled context, and enforces specialist ca
             steps: ['Add API coverage.'],
             risks: ['Malformed output stays read-only.'],
           },
-          changes: [{ path: 'src/unauthorized.js', content: 'must not apply' }, { path: '../escape.js', content: 'must not escape' }, { path: 'src/unauthorized.js', content: 'duplicate path must not apply twice' }],
+          changes: [{ path: 'src/unauthorized.js', content: 'must not apply' }, { path: '../escape.js', content: 'must not escape' }, { path: '__proto__', content: 'must not mutate object prototypes' }, { path: 'src/unauthorized.js', content: 'duplicate path must not apply twice' }],
           commands: [{ command: 'npm test' }, { command: 'rm -rf /' }],
         };
     response.end(JSON.stringify({ choices: [{ message: { content: typeof answer === 'string' ? answer : JSON.stringify(answer) } }] }));

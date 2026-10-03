@@ -109,7 +109,7 @@ function promptText(value) {
 function safeWorkspacePath(input) {
   if (typeof input !== 'string' || input.length > 180) return null;
   const normalized = input.replaceAll('\\', '/').replace(/^\.\//, '');
-  if (!normalized || normalized.startsWith('/') || normalized.includes('\0')) return null;
+  if (!normalized || normalized === '__proto__' || normalized.startsWith('/') || normalized.includes('\0')) return null;
   const parts = normalized.split('/');
   if (parts.some((part) => !part || part === '.' || part === '..')) return null;
   if (parts.some((part) => part.toLowerCase().startsWith('.env') || BLOCKED_WORKSPACE_SEGMENTS.has(part.toLowerCase()))) return null;
