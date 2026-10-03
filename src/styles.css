@@ -302,3 +302,8 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .proposal-diff-line.diff-removed > span { color: #e18a8d; }
 .proposal-diff-line.diff-omitted { color: #798187; background: rgba(255,255,255,.025); }
 .proposal-diff-line.diff-omitted > code { font-style: italic; }
+.proposal-diff-title > code { flex: 1; }
+.proposal-diff-selection { display: flex; flex: 0 0 auto; align-items: center; gap: 3px; color: #879486; font-size: 7px; cursor: pointer; user-select: none; }
+.proposal-diff-selection input { width: 11px; height: 11px; margin: 0; accent-color: #a8d68a; cursor: pointer; }
+.proposal-diff-selection input:disabled { cursor: default; }
+.proposal-diff-file.excluded { opacity: .47; }

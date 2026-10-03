@@ -104,3 +104,21 @@ export function createChangeReview(beforeValue, afterValue, lineLimit = MAX_VISI
     truncated: visible.truncated,
   };
 }
+
+export function selectProposalChanges(changes, excludedPaths = []) {
+  const excluded = new Set(Array.isArray(excludedPaths) ? excludedPaths : []);
+  return Array.isArray(changes)
+    ? changes.filter((change) => change && typeof change.path === 'string' && !excluded.has(change.path))
+    : [];
+}
+
+export function findStaleProposalPaths(changes, baselines = {}, currentFiles = {}) {
+  const safeBaselines = baselines && typeof baselines === 'object' ? baselines : {};
+  const safeCurrentFiles = currentFiles && typeof currentFiles === 'object' ? currentFiles : {};
+  return [...new Set(selectProposalChanges(changes)
+    .filter(({ path }) => Object.hasOwn(safeBaselines, path)
+      && (safeBaselines[path] === null
+        ? Object.hasOwn(safeCurrentFiles, path)
+        : !Object.hasOwn(safeCurrentFiles, path) || safeCurrentFiles[path] !== safeBaselines[path]))
+    .map(({ path }) => path))];
+}

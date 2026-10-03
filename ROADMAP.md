@@ -125,7 +125,7 @@ Codereo IDE is a proprietary, agent-first coding workspace for browser and deskt
 - [ ] AG-10 — Break large tasks into resumable, independently reviewable steps.
 - [ ] AG-11 — Track task state, tool calls, files, and verification evidence.
 - [ ] AG-12 — Pause, resume, cancel, and safely retry agent tasks.
-- [ ] AG-13 — Let users approve a plan but reject individual file edits.
+- [x] AG-13 — Let users approve a plan while excluding individual file edits from apply and repair passes.
 - [ ] AG-14 — Keep agent-generated edits in a separate review buffer.
 - [ ] AG-15 — Let agents explain tradeoffs before selecting an implementation.
 - [ ] AG-16 — Support read-only investigation before proposing any edit.

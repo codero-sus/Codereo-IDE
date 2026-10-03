@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createChangeReview } from '../../src/change-review.mjs';
+import { createChangeReview, findStaleProposalPaths, selectProposalChanges } from '../../src/change-review.mjs';
 
 test('change review summarizes line edits and preserves surrounding context', () => {
   const result = createChangeReview('alpha\nbeta\ngamma\ndelta', 'alpha\nBETA\ngamma\ndelta');
@@ -21,6 +21,24 @@ test('empty files do not create a synthetic blank diff line', () => {
   assert.equal(result.isNewFile, true);
   assert.equal(result.added, 0);
   assert.deepEqual(result.lines, []);
+});
+
+test('file selection applies only included paths and rejects stale baselines', () => {
+  const changes = [
+    { path: 'src/keep.js', content: 'new content' },
+    { path: 'src/exclude.js', content: 'excluded content' },
+    { path: 'src/new.js', content: 'new file' },
+  ];
+  const selected = selectProposalChanges(changes, ['src/exclude.js']);
+  assert.deepEqual(selected.map(({ path }) => path), ['src/keep.js', 'src/new.js']);
+  assert.deepEqual(findStaleProposalPaths(selected, { 'src/keep.js': 'before', 'src/new.js': null }, {
+    'src/keep.js': 'changed after review',
+    'src/exclude.js': 'excluded content',
+    'src/new.js': 'created after review',
+  }), ['src/keep.js', 'src/new.js']);
+  assert.deepEqual(findStaleProposalPaths(selected, { 'src/keep.js': 'before', 'src/new.js': null }, {
+    'src/keep.js': 'before',
+  }), []);
 });
 
 test('large diffs stay bounded and expose omitted-line markers', () => {
