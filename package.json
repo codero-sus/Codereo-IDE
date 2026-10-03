@@ -13,7 +13,7 @@
     "desktop:dev": "python desktop/main.py --dev",
     "desktop:electron": "electron desktop/main.cjs",
     "desktop:electron:package": "npm run build && electron-builder --publish never",
-    "test": "node --test tests/server/api.test.mjs tests/server/mind-store.test.mjs tests/server/research.test.mjs tests/server/workspace-index.test.mjs",
+    "test": "node --test tests/server/api.test.mjs tests/server/change-review.test.mjs tests/server/mind-store.test.mjs tests/server/research.test.mjs tests/server/workspace-index.test.mjs",
     "test:python": "python -m unittest discover -s tests/python -v"
   },
   "dependencies": {

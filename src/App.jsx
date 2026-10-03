@@ -13,6 +13,7 @@ import {
   ArrowDownToLine,
   ArrowRight,
   Bot,
+  BookOpen,
   Braces,
   BrainCircuit,
   Check,
@@ -33,6 +34,7 @@ import {
   HelpCircle,
   Info,
   LayoutGrid,
+  ListChecks,
   LoaderCircle,
   Maximize2,
   MessageSquareText,
@@ -54,6 +56,7 @@ import {
   Zap,
 } from 'lucide-react';
 import MindPanel from './MindPanel.jsx';
+import { createChangeReview } from './change-review.mjs';
 import { rankWorkspaceFiles, searchWorkspace } from './workspace-index.mjs';
 import './styles.css';
 
@@ -291,6 +294,7 @@ function App() {
   const [assistantMode, setAssistantMode] = useState('agent');
   const [assistantDraft, setAssistantDraft] = useState('');
   const [assistantBusy, setAssistantBusy] = useState(false);
+  const [savingQuestId, setSavingQuestId] = useState('');
   const [messages, setMessages] = useState([
     {
       id: 'welcome',
@@ -593,12 +597,18 @@ function App() {
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.message || 'The assistant could not complete that request.');
+      const proposedChanges = Array.isArray(data.changes) ? data.changes : [];
+      const changeBaselines = Object.fromEntries(proposedChanges.map(({ path }) => [path, Object.hasOwn(files, path) ? files[path] : null]));
+      const changeReviews = Object.fromEntries(proposedChanges.map(({ path, content }) => [path, createChangeReview(changeBaselines[path], content)]));
       setMessages((current) => [...current, {
         id: crypto.randomUUID(),
         role: 'assistant',
         content: data.message || 'I could not generate a response.',
         plan: Array.isArray(data.plan) ? data.plan : [],
-        changes: Array.isArray(data.changes) ? data.changes : [],
+        spec: data.spec && typeof data.spec === 'object' ? data.spec : null,
+        changes: proposedChanges,
+        changeBaselines,
+        changeReviews,
         commands: Array.isArray(data.commands) ? data.commands : [],
         blockedCommands: Array.isArray(data.blockedCommands) ? data.blockedCommands : [],
         time: timeLabel(),
@@ -645,6 +655,14 @@ function App() {
   };
 
   const approveAgentTask = async (message) => {
+    const baselines = message.changeBaselines || {};
+    const stalePaths = (message.changes || []).filter(({ path }) => Object.hasOwn(baselines, path)
+      && (baselines[path] === null ? Object.hasOwn(files, path) : files[path] !== baselines[path])).map(({ path }) => path);
+    if (stalePaths.length) {
+      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'stale', stalePaths } : item));
+      setToast(`Workspace changed after this diff was prepared (${stalePaths.slice(0, 2).join(', ')}). Ask for a fresh patch to review current contents.`);
+      return;
+    }
     const validChanges = (message.changes || []).filter(({ path, content }) =>
       typeof path === 'string' && typeof content === 'string' && !path.startsWith('/') && !path.split('/').includes('..') && !path.split('/').some((part) => part.startsWith('.env'))
     );
@@ -716,13 +734,15 @@ function App() {
             break;
           }
 
+          const repairBaselines = Object.fromEntries(repairs.map(({ path }) => [path, Object.hasOwn(workingFiles, path) ? workingFiles[path] : null]));
+          const repairReviews = Object.fromEntries(repairs.map(({ path, content }) => [path, createChangeReview(repairBaselines[path], content)]));
           repairs.forEach(({ path, content }) => { workingFiles[path] = content; });
           setFiles({ ...workingFiles });
           setOpenTabs((current) => [...new Set([...current, ...repairs.map(({ path }) => path)])]);
           await persistWorkspaceSnapshot(workingFiles);
           setMessages((current) => [...current, {
             id: crypto.randomUUID(), role: 'assistant', content: data.message || 'Applied a repair pass within the task you approved.',
-            plan: Array.isArray(data.plan) ? data.plan : [], changes: repairs, proposalState: 'auto-applied', time: timeLabel(),
+            plan: Array.isArray(data.plan) ? data.plan : [], changes: repairs, changeBaselines: repairBaselines, changeReviews: repairReviews, proposalState: 'auto-applied', time: timeLabel(),
           }]);
           if (workingFiles['index.html']) setPreviewDocument(buildPreviewDocument(workingFiles));
           const newCommands = (data.commands || []).map((item) => typeof item === 'string' ? item : item.command).filter(Boolean);
@@ -757,6 +777,58 @@ function App() {
 
   const discardProposal = (messageId) => {
     setMessages((current) => current.map((message) => message.id === messageId ? { ...message, proposalState: 'discarded' } : message));
+  };
+
+  const saveQuestToDesk = async (message) => {
+    if (!message.spec || savingQuestId) return;
+    setSavingQuestId(message.id);
+    const spec = message.spec;
+    const list = (items) => Array.isArray(items) && items.length ? items.map((item) => `- ${item}`).join('\n') : '- None';
+    const content = [
+      `# ${spec.goal || 'Quest implementation spec'}`,
+      '',
+      '## Requirements',
+      list(spec.requirements),
+      '',
+      '## Design',
+      spec.design || 'No design notes supplied.',
+      '',
+      '## Acceptance criteria',
+      list(spec.acceptanceCriteria),
+      '',
+      '## Steps',
+      list(spec.steps?.length ? spec.steps : message.plan),
+      '',
+      '## Risks',
+      list(spec.risks),
+    ].join('\n').slice(0, 19_500);
+    const steps = (Array.isArray(spec.steps) && spec.steps.length ? spec.steps : message.plan || []).slice(0, 16);
+    try {
+      const noteResponse = await fetch('/api/mind/notes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: `Quest: ${spec.goal || 'Implementation plan'}`, content }),
+      });
+      const noteData = await noteResponse.json().catch(() => ({}));
+      if (!noteResponse.ok) throw new Error(noteData.message || 'Could not save the Quest note.');
+      for (const step of steps) {
+        const taskResponse = await fetch('/api/mind/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: step, source: `quest:${message.id}` }),
+        });
+        const taskData = await taskResponse.json().catch(() => ({}));
+        if (!taskResponse.ok) throw new Error(taskData.message || 'Quest note saved, but one or more Desk tasks could not be added.');
+      }
+      const stateResponse = await fetch('/api/mind/state');
+      if (stateResponse.ok) setMindState(await stateResponse.json());
+      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, questSaved: true } : item));
+      setToast(`Quest saved to Mind Desk · ${steps.length} step${steps.length === 1 ? '' : 's'}`);
+    } catch (error) {
+      setToast(error.message || 'Could not save this Quest to Mind Desk.');
+    } finally {
+      setSavingQuestId('');
+    }
   };
 
   const copyEnvSnippet = async () => {
@@ -915,7 +987,7 @@ function App() {
               </div>
             </>
           ) : activeActivity === 'mind' ? (
-            <MindPanel files={files} workspaceName={workspaceName} onOpenFile={openFile} selectedAgentId={activeAgentId} onSelectAgent={selectAgent} memoryEnabled={memoryEnabled} onMemoryToggle={updateMemoryEnabled} onStateChange={setMindState} />
+            <MindPanel files={files} workspaceName={workspaceName} onOpenFile={openFile} selectedAgentId={activeAgentId} onSelectAgent={selectAgent} memoryEnabled={memoryEnabled} onMemoryToggle={updateMemoryEnabled} onStateChange={setMindState} mindState={mindState} />
           ) : activeActivity === 'source' ? (
             <div className="utility-panel">
               <div className="panel-title-row"><span>SOURCE CONTROL</span><button className="mini-icon-button" onClick={() => setActiveActivity('explorer')}><X size={14} /></button></div>
@@ -1038,6 +1110,7 @@ function App() {
               <button className={assistantMode === 'ask' ? 'active' : ''} onClick={() => setAssistantMode('ask')}><MessageSquareText size={13} /> Ask</button>
               <button className={assistantMode === 'plan' ? 'active' : ''} onClick={() => setAssistantMode('plan')}><Circle size={13} /> Plan</button>
               <button className={assistantMode === 'agent' ? 'active' : ''} onClick={() => setAssistantMode('agent')}><Sparkles size={13} /> Agent</button>
+              <button className={assistantMode === 'quest' ? 'active' : ''} onClick={() => setAssistantMode('quest')} title="Quest: spec, milestones, and a reviewable patch"><ListChecks size={13} /> Quest</button>
             </div>
             <div className="assistant-profile-row"><BrainCircuit size={13} /><label htmlFor="assistant-agent-profile">Specialist</label><select id="assistant-agent-profile" value={activeAgentId} onChange={(event) => selectAgent(event.target.value)}>{(mindState.agents.length ? mindState.agents : [{ id: 'operator', name: 'Operator' }]).map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select><button type="button" title="Manage memory, agents, and research" onClick={() => setActiveActivity('mind')}><BrainCircuit size={12} /></button></div>
             <div className="agent-safety-note"><ShieldCheck size={13} /><span>Approve once · agent edits and safe checks · risky commands withheld</span></div>
@@ -1050,13 +1123,30 @@ function App() {
                     <div className="message-meta"><span>{message.role === 'user' ? 'You' : 'Codereo'}</span><time>{message.time}</time></div>
                     <div className="message-bubble">{message.content}</div>
                     {message.plan?.length > 0 && <ol className="plan-list">{message.plan.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}</ol>}
+                    {message.spec && <section className="quest-spec-card">
+                      <div className="quest-spec-heading"><div className="proposal-icon"><ListChecks size={14} /></div><div><strong>Quest specification</strong><span>Outcome · design · acceptance · delivery steps</span></div></div>
+                      {message.spec.goal && <p className="quest-goal">{message.spec.goal}</p>}
+                      {message.spec.requirements?.length > 0 && <div className="quest-spec-section"><strong>Requirements</strong><ul>{message.spec.requirements.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}
+                      {message.spec.design && <div className="quest-spec-section"><strong>Design</strong><p>{message.spec.design}</p></div>}
+                      {message.spec.acceptanceCriteria?.length > 0 && <div className="quest-spec-section"><strong>Acceptance criteria</strong><ul>{message.spec.acceptanceCriteria.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}
+                      {message.spec.steps?.length > 0 && <div className="quest-spec-section"><strong>Steps</strong><ol>{message.spec.steps.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ol></div>}
+                      {message.spec.risks?.length > 0 && <div className="quest-spec-section"><strong>Risks</strong><ul>{message.spec.risks.map((item, index) => <li key={`${item}-${index}`}>{item}</li>)}</ul></div>}
+                      <div className="quest-save-row">{message.questSaved ? <span className="quest-saved"><Check size={12} /> Saved to Mind Desk</span> : <button type="button" disabled={Boolean(savingQuestId)} onClick={() => saveQuestToDesk(message)}>{savingQuestId === message.id ? <LoaderCircle size={12} className="spin" /> : <BookOpen size={12} />} Save spec &amp; steps to Desk</button>}</div>
+                    </section>}
                     {message.changes?.length > 0 && (
                       <div className="proposal-card">
-                        <div className="proposal-heading"><div className="proposal-icon"><FileCode2 size={14} /></div><div><strong>Agent task ready</strong><span>{message.changes.length} file{message.changes.length === 1 ? '' : 's'} · review, then approve once</span></div></div>
-                        <div className="proposal-files">{message.changes.map((change) => <div className="proposal-file" key={change.path}><IconForFile name={change.path} size={13} /><span>{change.path}</span><span className="proposal-change-label">M</span></div>)}</div>
+                        <div className="proposal-heading"><div className="proposal-icon"><FileCode2 size={14} /></div><div><strong>{message.proposalState === 'auto-applied' ? 'Repair applied' : message.spec ? 'Quest patch ready' : 'Agent task ready'}</strong><span>{message.proposalState === 'auto-applied' ? `${message.changes.length} file${message.changes.length === 1 ? '' : 's'} · covered by the original task approval` : `${message.changes.length} file${message.changes.length === 1 ? '' : 's'} · inspect each diff, then approve once`}</span></div></div>
+                        <div className="proposal-files">{message.changes.map((change) => <div className="proposal-file" key={change.path}><IconForFile name={change.path} size={13} /><span>{change.path}</span><span className="proposal-change-label">{message.changeReviews?.[change.path]?.isNewFile ? 'A' : 'M'}</span></div>)}</div>
+                        <div className="proposal-diff-list">{message.changes.map((change) => {
+                          const review = message.changeReviews?.[change.path] || createChangeReview(message.changeBaselines?.[change.path] ?? null, change.content);
+                          return <section className="proposal-diff-file" key={change.path}>
+                            <div className="proposal-diff-title"><code title={change.path}>{change.path}</code><span><i className="diff-added-count">+{review.added}</i> <i className="diff-removed-count">−{review.removed}</i></span></div>
+                            <div className="proposal-diff-lines">{review.lines.map((line, index) => <div className={`proposal-diff-line diff-${line.type}`} key={`${line.type}-${index}`}><span>{line.type === 'added' ? '+' : line.type === 'removed' ? '−' : line.type === 'omitted' ? '…' : ' '}</span><code>{line.type === 'omitted' ? `${line.count} lines omitted` : line.text || ' '}</code></div>)}</div>
+                          </section>;
+                        })}</div>
                         {message.commands?.length > 0 ? <div className="proposal-check-list"><strong>Checks after approval</strong>{message.commands.map((item) => <div key={item.command}><Terminal size={11} /><code>{item.command}</code></div>)}</div> : <div className="proposal-check-hint">After approval, Codereo will detect safe test/build checks in the project and run them in desktop mode.</div>}
                         {message.blockedCommands?.length > 0 && <div className="blocked-command-note"><strong>Requires explicit approval · never auto-run</strong>{message.blockedCommands.map((command, index) => <div className="blocked-command-row" key={`${command}-${index}`}><code title={command}>{command}</code>{window.codereoDesktop?.runConfirmedCommand ? <button type="button" disabled={assistantBusy || !desktopWorkspaceRoot} title={!desktopWorkspaceRoot ? 'Open a desktop workspace first' : 'Review in the desktop confirmation dialog'} onClick={() => runConfirmedAgentCommand(message.id, command)}>Review &amp; run</button> : <span>Desktop only</span>}</div>)}{message.manualCommandResults?.map((result, index) => <div className="manual-command-result" key={`${result.command}-${index}`}><span className={result.ok ? 'check-pass' : result.canceled ? '' : 'check-fail'}>{result.canceled ? 'Canceled' : result.timedOut ? 'Timed out' : result.ok ? 'Finished' : `Exit ${result.exitCode ?? -1}`}</span><code>{result.command}</code><pre>{result.output || (result.ok ? 'Command completed.' : '')}</pre></div>)}</div>}
-                        {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy} onClick={() => approveAgentTask(message)}><Check size={13} /> Approve task & verify</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
+                        {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'stale' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Workspace files changed after review{message.stalePaths?.length ? `: ${message.stalePaths.join(', ')}` : ''}. Request a fresh patch before applying.</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy} onClick={() => approveAgentTask(message)}><Check size={13} /> Approve task & verify</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
                         {message.verification && <div className={`verification-card ${message.verification.ok ? 'passed' : 'failed'}`}><strong>{message.verification.ok ? 'Verification' : 'Checks need attention'}</strong>{message.verification.message && <p>{message.verification.message}</p>}{(message.verification.results || []).map((result, index) => <div className="verification-result" key={`${result.command}-${index}`}><span className={result.exitCode === 0 ? 'check-pass' : 'check-fail'}>{result.exitCode === 0 ? 'PASS' : 'FAIL'}</span><code>{result.command}</code>{result.output && <pre>{result.output.slice(0, 1600)}</pre>}</div>)}</div>}
                       </div>
                     )}
@@ -1068,7 +1158,7 @@ function App() {
             </div>
             <div className="assistant-context-row"><div className="context-file-icon"><Files size={13} /></div><span>{allFilePaths.length} workspace files · {mindState.memoryCount || 0} memories</span><label className="memory-recall-control" title="Include relevant local memory excerpts with this provider request"><input type="checkbox" checked={memoryEnabled} disabled={!activeAgentCanUseMemory} onChange={(event) => updateMemoryEnabled(event.target.checked)} /><span>Recall</span></label><button title="Manage local memory" onClick={() => setActiveActivity('mind')}><Info size={13} /></button></div>
             <form className="chat-composer" onSubmit={(event) => { event.preventDefault(); sendAssistantMessage(); }}>
-              <textarea ref={chatInputRef} value={assistantDraft} onChange={(event) => setAssistantDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendAssistantMessage(); } }} placeholder={assistantMode === 'ask' ? 'Ask about your code…' : assistantMode === 'plan' ? 'What would you like to plan?' : 'Describe a change to make…'} rows={2} />
+              <textarea ref={chatInputRef} value={assistantDraft} onChange={(event) => setAssistantDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendAssistantMessage(); } }} placeholder={assistantMode === 'ask' ? 'Ask about your code…' : assistantMode === 'plan' ? 'What would you like to plan?' : assistantMode === 'quest' ? 'Describe the outcome; Quest will spec it and map the steps…' : 'Describe a change to make…'} rows={2} />
               <div className="composer-bottom"><div className="composer-hint"><span>↵</span> to send · <span>⇧ ↵</span> for new line</div><button type="submit" className="send-button" aria-label="Send message" disabled={!assistantDraft.trim() || assistantBusy}><Send size={14} /></button></div>
             </form>
             <div className="assistant-footer"><span><ShieldCheck size={12} /> Private by default</span><button onClick={() => setSettingsOpen(true)}>Configure AI</button></div>

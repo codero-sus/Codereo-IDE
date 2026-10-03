@@ -24,7 +24,7 @@ function formatDate(value) {
   return new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' }).format(new Date(value));
 }
 
-export default function MindPanel({ files, workspaceName, onOpenFile, selectedAgentId, onSelectAgent, memoryEnabled, onMemoryToggle, onStateChange }) {
+export default function MindPanel({ files, workspaceName, onOpenFile, selectedAgentId, onSelectAgent, memoryEnabled, onMemoryToggle, onStateChange, mindState: sharedMindState }) {
   const [state, setState] = useState(EMPTY_STATE);
   const [tab, setTab] = useState('memory');
   const [busy, setBusy] = useState(false);
@@ -57,6 +57,7 @@ export default function MindPanel({ files, workspaceName, onOpenFile, selectedAg
   }, [onStateChange]);
 
   useEffect(() => { reload().catch((cause) => setError(cause.message)); }, [reload]);
+  useEffect(() => { if (sharedMindState) setState(sharedMindState); }, [sharedMindState]);
 
   const mutate = async (url, method, body) => {
     setBusy(true);

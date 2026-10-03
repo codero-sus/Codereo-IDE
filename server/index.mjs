@@ -154,6 +154,12 @@ function safeValidationCommand(raw) {
   return SAFE_VALIDATION_COMMANDS.has(normalized) ? normalized : null;
 }
 
+function boundedStringList(value, limit = 10, maxChars = 360) {
+  return Array.isArray(value)
+    ? value.slice(0, limit).filter((item) => typeof item === 'string').map((item) => item.trim().slice(0, maxChars)).filter(Boolean)
+    : [];
+}
+
 function parseAgentResponse(raw) {
   const unfenced = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '').trim();
   let parsed;
@@ -162,20 +168,31 @@ function parseAgentResponse(raw) {
   } catch {
     const start = unfenced.indexOf('{');
     const end = unfenced.lastIndexOf('}');
-    if (start < 0 || end <= start) return { message: raw, plan: [], changes: [], commands: [], blockedCommands: [] };
+    if (start < 0 || end <= start) return { message: raw, plan: [], spec: null, changes: [], commands: [], blockedCommands: [] };
     try {
       parsed = JSON.parse(unfenced.slice(start, end + 1));
     } catch {
-      return { message: raw, plan: [], changes: [], commands: [], blockedCommands: [] };
+      return { message: raw, plan: [], spec: null, changes: [], commands: [], blockedCommands: [] };
     }
   }
 
-  const plan = Array.isArray(parsed?.plan) ? parsed.plan.filter((item) => typeof item === 'string').slice(0, 8) : [];
+  const plan = boundedStringList(parsed?.plan, 8, 360);
+  const rawSpec = parsed?.spec && typeof parsed.spec === 'object' && !Array.isArray(parsed.spec) ? parsed.spec : null;
+  const spec = rawSpec ? {
+    goal: typeof rawSpec.goal === 'string' ? rawSpec.goal.trim().slice(0, 500) : '',
+    requirements: boundedStringList(rawSpec.requirements, 12, 400),
+    design: typeof rawSpec.design === 'string' ? rawSpec.design.trim().slice(0, 5_000) : '',
+    acceptanceCriteria: boundedStringList(rawSpec.acceptanceCriteria, 12, 400),
+    steps: boundedStringList(rawSpec.steps, 16, 360),
+    risks: boundedStringList(rawSpec.risks, 8, 400),
+  } : null;
   const changes = [];
+  const seenPaths = new Set();
   if (Array.isArray(parsed?.changes)) {
     for (const change of parsed.changes.slice(0, 8)) {
       const filePath = safeWorkspacePath(change?.path);
-      if (!filePath || typeof change?.content !== 'string' || change.content.length > 60_000) continue;
+      if (!filePath || seenPaths.has(filePath) || typeof change?.content !== 'string' || change.content.length > 60_000) continue;
+      seenPaths.add(filePath);
       changes.push({ path: filePath, content: change.content });
     }
   }
@@ -195,7 +212,7 @@ function parseAgentResponse(raw) {
   const message = typeof parsed?.message === 'string' && parsed.message.trim()
     ? parsed.message.trim()
     : changes.length ? `I prepared ${changes.length} file change${changes.length === 1 ? '' : 's'} for review.` : 'Here is the result.';
-  return { message, plan, changes, commands, blockedCommands };
+  return { message, plan, spec, changes, commands, blockedCommands };
 }
 
 function responseText(providerId, data) {
@@ -222,7 +239,7 @@ function providerErrorMessage(providerId, data, secret = '') {
 }
 
 async function callProvider(config, systemPrompt, turns, mode, signal) {
-  const temperature = mode === 'agent' ? 0.2 : 0.5;
+  const temperature = mode === 'agent' || mode === 'quest' ? 0.2 : 0.5;
   let endpoint;
   let headers = { 'Content-Type': 'application/json' };
   let body;
@@ -352,7 +369,7 @@ app.post('/api/assistant', async (req, res) => {
   }
 
   const { messages = [], files = [] } = body;
-  if (!['ask', 'plan', 'agent'].includes(mode) || !Array.isArray(messages) || messages.length === 0) {
+  if (!['ask', 'plan', 'agent', 'quest'].includes(mode) || !Array.isArray(messages) || messages.length === 0) {
     return res.status(400).json({ error: 'INVALID_REQUEST', message: 'Choose a mode and provide a message.' });
   }
   const turns = messages.slice(-20).filter((item) =>
@@ -380,6 +397,10 @@ app.post('/api/assistant', async (req, res) => {
   }
   if (mode === 'plan') {
     systemPrompt += '\n\nThe user selected Plan mode. Explain an ordered, concise approach. Do not return file changes or commands.';
+  } else if (mode === 'quest' && activeAgent.capabilities.includes('propose-edits')) {
+    systemPrompt += `\\n\nThe user selected Quest mode for a substantial coding task. First make a compact, concrete implementation spec, then prepare the corresponding reviewable patch in the same response so the user can approve the task once. Do not claim to have applied changes or run checks. Return ONLY valid JSON with this shape: {"message":"brief outcome","plan":["milestone"],"spec":{"goal":"measurable outcome","requirements":["requirement"],"design":"implementation outline","acceptanceCriteria":["observable pass condition"],"steps":["ordered work item"],"risks":["risk or none"]},"changes":[{"path":"relative/path","content":"complete replacement file content"}],"commands":[{"command":"npm test","purpose":"Run focused tests"}]}. Keep the spec short and actionable. Every proposed file replacement and test command will be visible for one task approval before application. Suggest validation commands only from this allowlist: npm test, npm run test, npm run build, npm run lint, npm run typecheck, npm run check, pnpm test, pnpm run test, pnpm run build, pnpm run lint, pnpm run typecheck, pnpm run check, yarn test, yarn build, yarn lint, yarn typecheck, yarn check, bun test, bun run build, bun run lint, bun run typecheck, pytest, python -m pytest, python3 -m pytest, cargo test, go test ./.... Never suggest shell operators, installs, network commands, destructive commands, or secrets.`;
+  } else if (mode === 'quest') {
+    systemPrompt += `\\n\nThe user selected Quest mode, but this specialist is read-only. Return a compact implementation spec in valid JSON using {"message":"brief outcome","plan":["milestone"],"spec":{"goal":"measurable outcome","requirements":["requirement"],"design":"outline","acceptanceCriteria":["pass condition"],"steps":["ordered work item"],"risks":[]},"changes":[],"commands":[]}. Do not propose file changes or commands.`;
   } else if (mode === 'agent' && activeAgent.capabilities.includes('propose-edits')) {
     systemPrompt += `\n\nThe user selected Agent mode. Propose useful multi-file edits and a short ordered plan, but do not claim to apply them. Return ONLY valid JSON with this shape: {"message":"brief summary","plan":["step"],"changes":[{"path":"relative/path","content":"complete replacement file content"}],"commands":[{"command":"npm test","purpose":"Run the project tests"}]}. Each change replaces a full file and will be shown for task approval before it is applied. You may suggest validation commands only from this allowlist: npm test, npm run test, npm run build, npm run lint, npm run typecheck, npm run check, pnpm test, pnpm run test, pnpm run build, pnpm run lint, pnpm run typecheck, pnpm run check, yarn test, yarn build, yarn lint, yarn typecheck, yarn check, bun test, bun run build, bun run lint, bun run typecheck, pytest, python -m pytest, python3 -m pytest, cargo test, go test ./.... Never suggest shell operators, installs, network commands, destructive commands, or secrets. The IDE filters commands and only runs these local validation commands after the user approves the whole task.`;
   } else if (mode === 'agent') {
@@ -392,7 +413,7 @@ app.post('/api/assistant', async (req, res) => {
   const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
     const answer = await callProvider(config, systemPrompt, turns, mode, controller.signal);
-    if (mode === 'agent') {
+    if (mode === 'agent' || mode === 'quest') {
       const proposal = parseAgentResponse(answer);
       if (!activeAgent.capabilities.includes('propose-edits')) proposal.changes = [];
       if (!activeAgent.capabilities.includes('request-validation')) {
