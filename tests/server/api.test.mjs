@@ -31,12 +31,26 @@ test('Mind API imports chats, gates recalled context, and enforces specialist ca
       return;
     }
     response.writeHead(200, { 'content-type': 'application/json' });
-    response.end(JSON.stringify({ choices: [{ message: { content: JSON.stringify({
-      message: 'Read-only specialist response.',
-      plan: ['Review the supplied evidence.'],
-      changes: [{ path: 'src/unauthorized.js', content: 'must not apply' }],
-      commands: [{ command: 'npm test' }, { command: 'rm -rf /' }],
-    }) } }] }));
+    const lastTurn = payload.messages.at(-1)?.content || '';
+    const answer = lastTurn.includes('fixture plain text')
+      ? 'A plain-text fixture with no JSON object.'
+      : lastTurn.includes('fixture invalid JSON')
+        ? 'Result: {this is not valid JSON}'
+        : {
+          message: 'Read-only specialist response.',
+          plan: ['Review the supplied evidence.'],
+          spec: {
+            goal: 'Deliver a bounded Quest workflow.',
+            requirements: ['Show a structured spec.'],
+            design: 'Parse the response through the existing approval pipeline.',
+            acceptanceCriteria: ['A reviewable spec is returned.'],
+            steps: ['Add API coverage.'],
+            risks: ['Malformed output stays read-only.'],
+          },
+          changes: [{ path: 'src/unauthorized.js', content: 'must not apply' }, { path: '../escape.js', content: 'must not escape' }, { path: 'src/unauthorized.js', content: 'duplicate path must not apply twice' }],
+          commands: [{ command: 'npm test' }, { command: 'rm -rf /' }],
+        };
+    response.end(JSON.stringify({ choices: [{ message: { content: typeof answer === 'string' ? answer : JSON.stringify(answer) } }] }));
   });
   await new Promise((resolve) => provider.listen(0, '127.0.0.1', resolve));
 
@@ -134,6 +148,42 @@ test('Mind API imports chats, gates recalled context, and enforces specialist ca
     assert.match(capturedPrompt, /preserve public APIs/);
     assert.doesNotMatch(capturedPrompt, /DO_NOT_SEND/);
     assert.equal(capturedAuthorization, 'Bearer fixture-secret');
+
+    const readOnlyQuestResponse = await fetch(`${baseUrl}/api/assistant`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'quest', agentId: custom.agent.id, messages: [{ role: 'user', content: 'Prepare a Quest spec.' }] }),
+    });
+    const readOnlyQuest = await readOnlyQuestResponse.json();
+    assert.equal(readOnlyQuestResponse.status, 200);
+    assert.equal(readOnlyQuest.spec.goal, 'Deliver a bounded Quest workflow.');
+    assert.deepEqual(readOnlyQuest.spec.steps, ['Add API coverage.']);
+    assert.deepEqual(readOnlyQuest.changes, []);
+    assert.deepEqual(readOnlyQuest.commands, []);
+    assert.match(capturedPrompt, /Quest mode, but this specialist is read-only/);
+
+    const writableQuestResponse = await fetch(`${baseUrl}/api/assistant`, {
+      method: 'POST', headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ mode: 'quest', agentId: 'operator', messages: [{ role: 'user', content: 'Prepare a patch-backed Quest.' }] }),
+    });
+    const writableQuest = await writableQuestResponse.json();
+    assert.equal(writableQuestResponse.status, 200);
+    assert.equal(writableQuest.spec.acceptanceCriteria[0], 'A reviewable spec is returned.');
+    assert.deepEqual(writableQuest.changes, [{ path: 'src/unauthorized.js', content: 'must not apply' }]);
+    assert.deepEqual(writableQuest.commands.map((item) => item.command), ['npm test']);
+    assert.deepEqual(writableQuest.blockedCommands, ['rm -rf /']);
+    assert.match(capturedPrompt, /approve the task once/);
+
+    for (const malformedPrompt of ['fixture plain text', 'fixture invalid JSON']) {
+      const malformedResponse = await fetch(`${baseUrl}/api/assistant`, {
+        method: 'POST', headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ mode: 'quest', agentId: 'operator', messages: [{ role: 'user', content: malformedPrompt }] }),
+      });
+      const malformed = await malformedResponse.json();
+      assert.equal(malformedResponse.status, 200);
+      assert.equal(malformed.spec, null);
+      assert.deepEqual(malformed.changes, []);
+      assert.deepEqual(malformed.commands, []);
+    }
 
     const noRecallResponse = await fetch(`${baseUrl}/api/assistant`, {
       method: 'POST', headers: { 'content-type': 'application/json' },

@@ -120,7 +120,7 @@ Codereo IDE is a proprietary, agent-first coding workspace for browser and deskt
 - [x] AG-05 — Run inferred, allowlisted project checks in desktop mode.
 - [x] AG-06 — Give the agent failed-check output for bounded repair passes.
 - [x] AG-07 — Limit the current repair loop to two automatic iterations.
-- [ ] AG-08 — Show a reviewable diff before approving each patch.
+- [x] AG-08 — Show a bounded per-file line diff, with omitted-line markers, before approving each patch.
 - [ ] AG-09 — Support task plans with editable goals and acceptance criteria.
 - [ ] AG-10 — Break large tasks into resumable, independently reviewable steps.
 - [ ] AG-11 — Track task state, tool calls, files, and verification evidence.

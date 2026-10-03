@@ -265,3 +265,40 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .repo-atlas-guidance { padding: 5px 0; }
 .repo-atlas-guidance strong { color: #a8bd9b; font: 6px var(--mono); }
 .repo-atlas-guidance p { margin: 4px 0; color: #8a9486; font-size: 6px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+/* Quest mode spec, Mind Desk action, and bounded pre-approval patch review. */
+.quest-spec-card { margin: 10px 0; padding: 8px; border: 1px solid rgba(130,169,222,.18); border-radius: 6px; background: linear-gradient(145deg, rgba(58,77,107,.15), rgba(21,24,31,.72)); }
+.quest-spec-heading { display: flex; align-items: center; gap: 8px; }
+.quest-spec-heading > div:last-child { min-width: 0; }
+.quest-spec-heading strong, .quest-spec-heading span { display: block; }
+.quest-spec-heading strong { color: #d0d9e7; font-size: 9px; font-weight: 650; }
+.quest-spec-heading span { margin-top: 3px; color: #8998ab; font-size: 7px; }
+.quest-spec-card .proposal-icon { color: #a8c8f3; background: rgba(111,154,213,.12); }
+.quest-goal { margin: 8px 0 4px; color: #c8d5e5; font-size: 8px; line-height: 1.55; }
+.quest-spec-section { margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.045); }
+.quest-spec-section > strong { display: block; margin-bottom: 4px; color: #a8b7cb; font-size: 7px; font-weight: 650; letter-spacing: .045em; text-transform: uppercase; }
+.quest-spec-section > p, .quest-spec-section li { margin: 0; color: #929ca9; font-size: 7px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; }
+.quest-spec-section ul, .quest-spec-section ol { display: flex; flex-direction: column; gap: 3px; margin: 0; padding-left: 15px; }
+.quest-save-row { display: flex; justify-content: flex-end; margin-top: 9px; padding-top: 7px; border-top: 1px solid rgba(255,255,255,.05); }
+.quest-save-row button { display: flex; align-items: center; gap: 5px; min-height: 25px; padding: 0 8px; border: 1px solid rgba(137,177,231,.2); border-radius: 4px; color: #b6cbed; background: rgba(101,141,194,.09); font-size: 7px; cursor: pointer; }
+.quest-save-row button:hover:not(:disabled) { background: rgba(101,141,194,.17); }
+.quest-save-row button:disabled { opacity: .65; cursor: wait; }
+.quest-saved { display: flex; align-items: center; gap: 4px; color: #a3d78a; font-size: 7px; }
+.proposal-diff-list { display: flex; flex-direction: column; gap: 7px; padding: 0 8px 8px; }
+.proposal-diff-file { overflow: hidden; border: 1px solid rgba(255,255,255,.055); border-radius: 4px; background: rgba(5,7,9,.25); }
+.proposal-diff-title { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 24px; padding: 4px 7px; border-bottom: 1px solid rgba(255,255,255,.05); background: rgba(255,255,255,.018); }
+.proposal-diff-title > code { min-width: 0; overflow: hidden; color: #b6c0b2; font: 7px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.proposal-diff-title > span { flex: 0 0 auto; font: 7px var(--mono); }
+.proposal-diff-title i { font-style: normal; }
+.diff-added-count { color: #99d79a; }
+.diff-removed-count { color: #e19a9d; }
+.proposal-diff-lines { max-height: 220px; overflow: auto; padding: 3px 0; scrollbar-color: rgba(141,155,174,.22) transparent; }
+.proposal-diff-line { display: grid; width: max-content; min-width: 100%; grid-template-columns: 18px max-content; min-height: 15px; color: #8e9690; }
+.proposal-diff-line > span { padding-right: 3px; color: #67716a; font: 7px/15px var(--mono); text-align: right; user-select: none; }
+.proposal-diff-line > code { overflow: visible; padding-right: 7px; color: inherit; font: 7px/15px var(--mono); text-overflow: clip; white-space: pre; }
+.proposal-diff-line.diff-added { color: #acd9a4; background: rgba(91,158,88,.105); }
+.proposal-diff-line.diff-added > span { color: #82c882; }
+.proposal-diff-line.diff-removed { color: #e6a2a2; background: rgba(169,77,83,.11); }
+.proposal-diff-line.diff-removed > span { color: #e18a8d; }
+.proposal-diff-line.diff-omitted { color: #798187; background: rgba(255,255,255,.025); }
+.proposal-diff-line.diff-omitted > code { font-style: italic; }
