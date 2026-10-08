@@ -18,7 +18,7 @@ from PySide6.QtWebChannel import QWebChannel
 from PySide6.QtWebEngineCore import QWebEngineSettings
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWidgets import QApplication, QFileDialog, QMainWindow, QMessageBox, QToolBar
-from local_capabilities import confirmed_environment, load_workspace, normalize_confirmed_command, normalize_validation_command, project_root, run_command, save_workspace, validation_environment
+from local_capabilities import confirmed_environment, delete_workspace_files, load_workspace, normalize_confirmed_command, normalize_validation_command, project_root, run_command, save_workspace, validation_environment
 
 
 
@@ -68,14 +68,23 @@ class DesktopBridge(QObject):
         self.window.workspace_root = root
         return {'canceled': False, 'root': str(root), 'name': root.name, 'files': files, 'skipped': skipped}
 
-    @Slot('QVariant', result='QVariant')
-    def saveWorkspace(self, files: Any) -> dict:
+    @Slot('QVariant', 'QVariant', result='QVariant')
+    def saveWorkspace(self, files: Any, expected_baselines: Any = None) -> dict:
         if not self.window.workspace_root:
             return {'ok': False, 'message': 'Open a folder before saving to disk.'}
         try:
-            return save_workspace(self.window.workspace_root, files)
+            return save_workspace(self.window.workspace_root, files, expected_baselines)
         except OSError as error:
             return {'ok': False, 'message': f'Could not save to the selected folder: {error}'}
+
+    @Slot('QVariant', result='QVariant')
+    def deleteWorkspaceFiles(self, paths: Any) -> dict:
+        if not self.window.workspace_root:
+            return {'ok': False, 'message': 'Open a folder before undoing task-created files.', 'deleted': 0, 'skipped': 0}
+        try:
+            return delete_workspace_files(self.window.workspace_root, paths)
+        except OSError as error:
+            return {'ok': False, 'message': f'Could not undo task-created files: {error}', 'deleted': 0, 'skipped': 0}
 
     @Slot('QVariant', result='QVariant')
     def runValidation(self, requested: Any) -> dict:
@@ -164,7 +173,8 @@ BRIDGE_SCRIPT = r'''(function () {
         isAvailable: true,
         platform: 'python-desktop',
         openWorkspace: function () { return new Promise(function (resolve) { bridge.openWorkspace(resolve); }); },
-        saveWorkspace: function (files) { return new Promise(function (resolve) { bridge.saveWorkspace(files, resolve); }); },
+        saveWorkspace: function (files, expectedBaselines) { return new Promise(function (resolve) { bridge.saveWorkspace(files, expectedBaselines, resolve); }); },
+        deleteWorkspaceFiles: function (paths) { return new Promise(function (resolve) { bridge.deleteWorkspaceFiles(paths, resolve); }); },
         runValidation: function (commands) { return run('runValidation', commands); },
         runConfirmedCommand: function (command) { return run('runConfirmedCommand', command); }
       });

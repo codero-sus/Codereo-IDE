@@ -251,10 +251,41 @@ ipcMain.handle('codereo:open-workspace', async () => {
   return { canceled: false, root: workspaceRoot, name: path.basename(workspaceRoot), files, skipped };
 });
 
-ipcMain.handle('codereo:save-workspace', async (_event, files) => {
+ipcMain.handle('codereo:save-workspace', async (_event, files, expectedBaselines) => {
   if (!workspaceRoot) return { ok: false, message: 'Open a folder before saving to disk.' };
   if (!files || typeof files !== 'object' || Array.isArray(files)) return { ok: false, message: 'Invalid workspace payload.' };
   const root = await fsPromises.realpath(workspaceRoot);
+  const expectedNewPaths = new Set();
+  if (expectedBaselines !== undefined && expectedBaselines !== null) {
+    if (!expectedBaselines || typeof expectedBaselines !== 'object' || Array.isArray(expectedBaselines) || Object.keys(expectedBaselines).length > MAX_WORKSPACE_FILES) {
+      return { ok: false, message: 'Invalid workspace baseline payload.' };
+    }
+    for (const [relativePath, expected] of Object.entries(expectedBaselines)) {
+      if (expected !== null && typeof expected !== 'string') return { ok: false, message: 'Invalid workspace baseline content.' };
+      const destination = await safeDestination(root, relativePath);
+      if (!destination) return { ok: false, message: 'The workspace changed since this task was reviewed. Reload the folder and request a fresh patch.' };
+      const existing = await fsPromises.lstat(destination).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error));
+      if (expected === null) {
+        if (existing) return { ok: false, message: 'The workspace changed since this task was reviewed. Reload the folder and request a fresh patch.' };
+        expectedNewPaths.add(safeRelativePath(relativePath).split(path.sep).join('/'));
+        continue;
+      }
+      const expectedBytes = Buffer.from(expected, 'utf8');
+      if (!existing || !existing.isFile() || existing.isSymbolicLink() || existing.size > MAX_FILE_BYTES || existing.size !== expectedBytes.length) {
+        return { ok: false, message: 'The workspace changed since this task was reviewed. Reload the folder and request a fresh patch.' };
+      }
+      let handle;
+      try {
+        handle = await fsPromises.open(destination, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+        const current = await handle.readFile();
+        if (!current.equals(expectedBytes)) return { ok: false, message: 'The workspace changed since this task was reviewed. Reload the folder and request a fresh patch.' };
+      } catch {
+        return { ok: false, message: 'The workspace changed since this task was reviewed. Reload the folder and request a fresh patch.' };
+      } finally {
+        await handle?.close().catch(() => {});
+      }
+    }
+  }
   const prepared = [];
   let totalBytes = 0;
   let skipped = 0;
@@ -265,22 +296,43 @@ ipcMain.handle('codereo:save-workspace', async (_event, files) => {
     if (bytes > MAX_FILE_BYTES || totalBytes + bytes > MAX_WORKSPACE_BYTES) { skipped += 1; continue; }
     const destination = await safeDestination(root, relativePath);
     if (!destination) { skipped += 1; continue; }
-    prepared.push({ destination, content });
+    prepared.push({ destination, content, relativePath: safeRelativePath(relativePath).split(path.sep).join('/') });
     totalBytes += bytes;
   }
+  if (expectedNewPaths.size) prepared.sort((left, right) => Number(expectedNewPaths.has(right.relativePath)) - Number(expectedNewPaths.has(left.relativePath)));
 
   let written = 0;
-  for (const { destination, content } of prepared) {
+  for (const { destination, content, relativePath } of prepared) {
     await fsPromises.mkdir(path.dirname(destination), { recursive: true });
     const parent = await fsPromises.realpath(path.dirname(destination));
     if (!isPathInside(root, parent)) { skipped += 1; continue; }
     const existing = await fsPromises.lstat(destination).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error));
     if (existing && (!existing.isFile() || existing.isSymbolicLink())) { skipped += 1; continue; }
-    await fsPromises.writeFile(destination, content, { encoding: 'utf8', mode: 0o600 });
+    await fsPromises.writeFile(destination, content, { encoding: 'utf8', mode: 0o600, flag: expectedNewPaths.has(relativePath) ? 'wx' : 'w' });
     written += 1;
   }
 
   return { ok: true, written, skipped };
+});
+
+ipcMain.handle('codereo:delete-workspace-files', async (_event, requestedPaths) => {
+  if (!workspaceRoot) return { ok: false, message: 'Open a folder before undoing task-created files.', deleted: 0, skipped: 0 };
+  if (!Array.isArray(requestedPaths)) return { ok: false, message: 'Invalid workspace delete list.', deleted: 0, skipped: 0 };
+  const root = await fsPromises.realpath(workspaceRoot);
+  let deleted = 0;
+  let skipped = Math.max(0, requestedPaths.length - MAX_WORKSPACE_FILES);
+  for (const relativePath of requestedPaths.slice(0, MAX_WORKSPACE_FILES)) {
+    const destination = await safeDestination(root, relativePath);
+    if (!destination) { skipped += 1; continue; }
+    try {
+      const existing = await fsPromises.lstat(destination).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error));
+      if (!existing) continue;
+      if (!existing.isFile() || existing.isSymbolicLink()) { skipped += 1; continue; }
+      await fsPromises.unlink(destination);
+      deleted += 1;
+    } catch { skipped += 1; }
+  }
+  return { ok: true, deleted, skipped };
 });
 
 ipcMain.handle('codereo:run-validation', async (_event, requestedCommands) => {

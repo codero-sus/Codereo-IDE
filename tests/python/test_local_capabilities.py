@@ -3,6 +3,7 @@ import unittest
 from pathlib import Path
 
 from desktop.local_capabilities import (
+    delete_workspace_files,
     load_workspace,
     normalize_confirmed_command,
     normalize_validation_command,
@@ -42,6 +43,45 @@ class WorkspaceBoundaryTests(unittest.TestCase):
             self.assertGreaterEqual(result['skipped'], 1)
             self.assertEqual((root / 'src' / 'new.py').read_text(), 'print(1)')
             self.assertFalse((outside / 'escape.txt').exists())
+
+    def test_save_checks_task_baselines_before_writing(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'workspace'
+            root.mkdir()
+            tracked = root / 'tracked.txt'
+            tracked.write_text('disk version', encoding='utf-8')
+            stale = save_workspace(root, {'tracked.txt': 'task version'}, {'tracked.txt': 'older version'})
+            self.assertFalse(stale['ok'])
+            self.assertEqual(tracked.read_text(encoding='utf-8'), 'disk version')
+
+            unloaded = root / 'unloaded.txt'
+            unloaded.write_text('unseen disk file', encoding='utf-8')
+            unexpected = save_workspace(root, {'unloaded.txt': 'task version'}, {'unloaded.txt': None})
+            self.assertFalse(unexpected['ok'])
+            self.assertEqual(tracked.read_text(encoding='utf-8'), 'disk version')
+            self.assertEqual(unloaded.read_text(encoding='utf-8'), 'unseen disk file')
+
+            matched = save_workspace(root, {'tracked.txt': 'task version'}, {'tracked.txt': 'disk version'})
+            self.assertTrue(matched['ok'])
+            self.assertEqual(tracked.read_text(encoding='utf-8'), 'task version')
+            created = save_workspace(root, {'new.txt': 'task file'}, {'new.txt': None})
+            self.assertTrue(created['ok'])
+            self.assertEqual((root / 'new.txt').read_text(encoding='utf-8'), 'task file')
+
+    def test_undo_deletes_only_safe_regular_workspace_files(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'workspace'
+            outside = Path(tmp) / 'outside.txt'
+            root.mkdir()
+            outside.write_text('keep outside', encoding='utf-8')
+            (root / 'new.txt').write_text('created by task', encoding='utf-8')
+            (root / 'linked.txt').symlink_to(outside)
+            result = delete_workspace_files(root, ['new.txt', '../outside.txt', 'linked.txt'])
+            self.assertEqual(result['deleted'], 1)
+            self.assertGreaterEqual(result['skipped'], 2)
+            self.assertFalse((root / 'new.txt').exists())
+            self.assertTrue((root / 'linked.txt').is_symlink())
+            self.assertEqual(outside.read_text(encoding='utf-8'), 'keep outside')
 
 
 class CommandPolicyTests(unittest.TestCase):
