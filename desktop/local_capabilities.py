@@ -88,11 +88,44 @@ def load_workspace(root: Path) -> tuple[dict[str, str], int]:
     return files, skipped
 
 
-def save_workspace(root: Path, files: Any) -> dict:
+def save_workspace(root: Path, files: Any, expected_baselines: Any = None) -> dict:
     if not isinstance(files, dict):
         return {'ok': False, 'message': 'Invalid workspace payload.'}
     root = root.resolve(strict=True)
-    prepared: list[tuple[Path, str]] = []
+    expected_new_paths: set[str] = set()
+    if expected_baselines is not None:
+        if not isinstance(expected_baselines, dict) or len(expected_baselines) > MAX_FILES:
+            return {'ok': False, 'message': 'Invalid workspace baseline payload.'}
+        for raw_path, expected in expected_baselines.items():
+            rel = safe_relative_path(raw_path)
+            if rel is None or (expected is not None and not isinstance(expected, str)):
+                return {'ok': False, 'message': 'Invalid workspace baseline path.'}
+            destination = root / rel
+            try:
+                if not is_inside(root, destination.resolve(strict=False)):
+                    raise OSError('path outside workspace')
+                if destination.is_symlink():
+                    raise OSError('symlink file')
+                if expected is None:
+                    if destination.exists():
+                        raise OSError('new path already exists')
+                    expected_new_paths.add(rel.as_posix())
+                    continue
+                stat = destination.stat()
+                expected_bytes = expected.encode('utf-8')
+                if not destination.is_file() or stat.st_size > MAX_FILE_BYTES or stat.st_size != len(expected_bytes):
+                    raise OSError('workspace baseline changed')
+                flags = os.O_RDONLY
+                if hasattr(os, 'O_NOFOLLOW'):
+                    flags |= os.O_NOFOLLOW
+                fd = os.open(destination, flags)
+                with os.fdopen(fd, 'rb') as handle:
+                    current = handle.read(MAX_FILE_BYTES + 1)
+                if current != expected_bytes:
+                    raise OSError('workspace baseline changed')
+            except OSError:
+                return {'ok': False, 'message': 'The workspace changed since this task was reviewed. Reload the folder and request a fresh patch.', 'written': 0, 'skipped': 0}
+    prepared: list[tuple[Path, str, str]] = []
     total_bytes = 0
     skipped = 0
     for raw_path, content in list(files.items())[:MAX_FILES]:
@@ -120,16 +153,20 @@ def save_workspace(root: Path, files: Any) -> dict:
         except OSError:
             skipped += 1
             continue
-        prepared.append((destination, content))
+        prepared.append((destination, content, rel.as_posix()))
         total_bytes += len(encoded)
+    if expected_new_paths:
+        prepared.sort(key=lambda item: item[2] not in expected_new_paths)
     written = 0
-    for destination, content in prepared:
+    new_conflicts = 0
+    for destination, content, relative_path in prepared:
         try:
             destination.parent.mkdir(parents=True, exist_ok=True)
             if not is_inside(root, destination.parent.resolve(strict=True)):
                 skipped += 1
                 continue
-            flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
+            flags = os.O_WRONLY | os.O_CREAT
+            flags |= os.O_EXCL if relative_path in expected_new_paths else os.O_TRUNC
             if hasattr(os, 'O_NOFOLLOW'):
                 flags |= os.O_NOFOLLOW
             fd = os.open(destination, flags, 0o600)
@@ -138,10 +175,53 @@ def save_workspace(root: Path, files: Any) -> dict:
             written += 1
         except OSError:
             skipped += 1
+            if relative_path in expected_new_paths:
+                new_conflicts += 1
+    if new_conflicts:
+        return {'ok': False, 'message': 'A proposed new file appeared while the task was being saved. Reload the folder and request a fresh patch.', 'written': written, 'skipped': skipped}
     return {'ok': True, 'written': written, 'skipped': skipped}
 
 
+def delete_workspace_files(root: Path, paths: Any) -> dict:
+    if not isinstance(paths, list):
+        return {'ok': False, 'message': 'Invalid workspace delete list.', 'deleted': 0, 'skipped': 0}
+    root = root.resolve(strict=True)
+    deleted = 0
+    skipped = 0
+    for raw_path in paths[:MAX_FILES]:
+        rel = safe_relative_path(raw_path)
+        if rel is None:
+            skipped += 1
+            continue
+        destination = root / rel
+        try:
+            if not is_inside(root, destination.resolve(strict=False)):
+                skipped += 1
+                continue
+            cursor = root
+            unsafe_parent = False
+            for part in rel.parts[:-1]:
+                cursor = cursor / part
+                if cursor.is_symlink() or (cursor.exists() and not cursor.is_dir()):
+                    unsafe_parent = True
+                    break
+            if unsafe_parent or destination.is_symlink():
+                skipped += 1
+                continue
+            if not destination.exists():
+                continue
+            if not destination.is_file():
+                skipped += 1
+                continue
+            destination.unlink()
+            deleted += 1
+        except OSError:
+            skipped += 1
+    return {'ok': True, 'deleted': deleted, 'skipped': skipped}
+
+
 def validation_environment() -> dict[str, str]:
+
     keys = ('PATH', 'HOME', 'USERPROFILE', 'SystemRoot', 'WINDIR', 'TEMP', 'TMP', 'TMPDIR', 'PATHEXT', 'ComSpec', 'APPDATA', 'LOCALAPPDATA')
     env = {key: os.environ[key] for key in keys if os.environ.get(key)}
     env.update({'CI': '1', 'NODE_ENV': 'test', 'npm_config_offline': 'true'})

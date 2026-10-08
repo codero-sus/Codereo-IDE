@@ -411,10 +411,16 @@ function App() {
     return () => window.removeEventListener('keydown', onKeyDown);
   });
 
-  const persistWorkspaceSnapshot = useCallback(async (snapshot) => {
+  const persistWorkspaceSnapshot = useCallback(async (snapshot, removePaths = [], expectedBaselines = null) => {
     if (desktopWorkspaceRoot && window.codereoDesktop?.isAvailable) {
-      const result = await window.codereoDesktop.saveWorkspace(snapshot);
+      const bridge = window.codereoDesktop;
+      const result = await bridge.saveWorkspace(snapshot, expectedBaselines);
       if (!result?.ok) throw new Error(result?.message || 'Could not save to the selected folder.');
+      if (removePaths.length) {
+        if (typeof bridge.deleteWorkspaceFiles !== 'function') throw new Error('This desktop bridge cannot safely remove task-created files.');
+        const removed = await bridge.deleteWorkspaceFiles(removePaths);
+        if (!removed?.ok || removed.skipped) throw new Error(removed?.message || `Could not remove ${removed?.skipped || removePaths.length} task-created file(s).`);
+      }
       setSavedFiles({ ...snapshot });
       return result;
     }
@@ -675,19 +681,39 @@ function App() {
       return;
     }
 
+    const rollbackSnapshot = Object.fromEntries(validChanges.map(({ path }) => [path, Object.hasOwn(files, path) ? files[path] : null]));
+    const diskBaselines = Object.fromEntries(validChanges.map(({ path }) => [path, Object.hasOwn(savedFiles, path) ? savedFiles[path] : null]));
     let workingFiles = { ...files };
     validChanges.forEach(({ path, content }) => { workingFiles[path] = content; });
+    const captureAppliedPatch = () => {
+      const appliedSnapshot = Object.fromEntries(Object.keys(rollbackSnapshot).map((path) => [path, Object.hasOwn(workingFiles, path) ? workingFiles[path] : null]));
+      const changedPaths = Object.keys(rollbackSnapshot).filter((path) => rollbackSnapshot[path] !== appliedSnapshot[path]);
+      const changes = changedPaths.filter((path) => appliedSnapshot[path] !== null).map((path) => ({ path, content: appliedSnapshot[path] }));
+      const changeBaselines = Object.fromEntries(changedPaths.map((path) => [path, rollbackSnapshot[path]]));
+      const changeReviews = Object.fromEntries(changedPaths.map((path) => [path, createChangeReview(rollbackSnapshot[path], appliedSnapshot[path] ?? '')]));
+      const reviews = Object.values(changeReviews);
+      return {
+        changes,
+        changeBaselines,
+        changeReviews,
+        changeSummary: { files: changedPaths.length, added: reviews.reduce((sum, review) => sum + review.added, 0), removed: reviews.reduce((sum, review) => sum + review.removed, 0) },
+        rollbackSnapshot: { ...rollbackSnapshot },
+        appliedSnapshot,
+      };
+    };
     const firstPath = validChanges[0].path;
     setFiles(workingFiles);
     setOpenTabs((current) => [...new Set([...current, ...validChanges.map(({ path }) => path)])]);
     openFile(firstPath);
-    setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'running' } : item));
+    setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'running', rollbackSnapshot: { ...rollbackSnapshot } } : item));
     setAssistantBusy(true);
     let iterations = 0;
     let verification = { ok: false, results: [], message: '' };
+    let workspacePersisted = false;
 
     try {
-      await persistWorkspaceSnapshot(workingFiles);
+      await persistWorkspaceSnapshot(workingFiles, [], diskBaselines);
+      workspacePersisted = true;
       if (workingFiles['index.html']) {
         setPreviewDocument(buildPreviewDocument(workingFiles));
         setPanelTab('output');
@@ -742,12 +768,22 @@ function App() {
             break;
           }
 
+          for (const { path } of repairs) {
+            if (!Object.hasOwn(rollbackSnapshot, path)) rollbackSnapshot[path] = Object.hasOwn(workingFiles, path) ? workingFiles[path] : null;
+          }
           const repairBaselines = Object.fromEntries(repairs.map(({ path }) => [path, Object.hasOwn(workingFiles, path) ? workingFiles[path] : null]));
           const repairReviews = Object.fromEntries(repairs.map(({ path, content }) => [path, createChangeReview(repairBaselines[path], content)]));
+          const beforeRepairFiles = { ...workingFiles };
           repairs.forEach(({ path, content }) => { workingFiles[path] = content; });
           setFiles({ ...workingFiles });
           setOpenTabs((current) => [...new Set([...current, ...repairs.map(({ path }) => path)])]);
-          await persistWorkspaceSnapshot(workingFiles);
+          try {
+            await persistWorkspaceSnapshot(workingFiles, [], repairBaselines);
+          } catch (error) {
+            workingFiles = beforeRepairFiles;
+            setFiles(beforeRepairFiles);
+            throw error;
+          }
           setMessages((current) => [...current, {
             id: crypto.randomUUID(), role: 'assistant', content: data.message || 'Applied a repair pass within the task you approved.',
             plan: Array.isArray(data.plan) ? data.plan : [], changes: repairs, changeBaselines: repairBaselines, changeReviews: repairReviews, proposalState: 'auto-applied', time: timeLabel(),
@@ -767,20 +803,95 @@ function App() {
         };
       }
 
+      const appliedPatch = captureAppliedPatch();
       setMessages((current) => current.map((item) => item.id === message.id ? {
         ...item,
+        ...appliedPatch,
+        excludedChangePaths: [],
         proposalState: verification.ok ? 'applied' : 'needs-attention',
         verification,
         repairIterations: iterations,
+        appliedAt: timeLabel(),
       } : item));
       setToast(verification.ok ? (iterations ? `Task verified after ${iterations} repair pass${iterations === 1 ? '' : 'es'}` : 'Approved task applied') : 'Task applied; checks still need attention');
     } catch (error) {
       verification = { ok: false, results: [], message: error.message || 'Task verification failed.' };
-      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'needs-attention', verification } : item));
-      setToast(error.message || 'Task applied, but verification did not complete');
+      if (!workspacePersisted) {
+        setFiles(files);
+        setOpenTabs(openTabs);
+        setActiveFile(activeFile);
+        const wasStale = /workspace changed since this task was reviewed/i.test(verification.message);
+        setMessages((current) => current.map((item) => item.id === message.id ? {
+          ...item,
+          proposalState: wasStale ? 'stale' : 'apply-failed',
+          stalePaths: wasStale ? validChanges.map(({ path }) => path) : [],
+          verification,
+        } : item));
+        setToast(`Task was not saved: ${verification.message}`);
+      } else {
+        const appliedPatch = captureAppliedPatch();
+        setMessages((current) => current.map((item) => item.id === message.id ? {
+          ...item,
+          ...appliedPatch,
+          excludedChangePaths: [],
+          proposalState: 'needs-attention',
+          verification,
+          appliedAt: timeLabel(),
+        } : item));
+        setToast(error.message || 'Task applied, but verification did not complete');
+      }
     } finally {
       setAssistantBusy(false);
     }
+  };
+
+  const undoApprovedTask = async (message) => {
+    if (assistantBusy) return;
+    const rollbackSnapshot = message.rollbackSnapshot;
+    const appliedSnapshot = message.appliedSnapshot;
+    if (!rollbackSnapshot || !appliedSnapshot) {
+      setToast('Undo data is unavailable for this task.');
+      return;
+    }
+    const paths = Object.keys(rollbackSnapshot);
+    const conflicts = findStaleProposalPaths(paths.map((path) => ({ path })), appliedSnapshot, files);
+    if (conflicts.length) {
+      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, undoConflictPaths: conflicts } : item));
+      setToast(`Undo stopped because these files changed after the task: ${conflicts.slice(0, 2).join(', ')}.`);
+      return;
+    }
+    const restoredFiles = { ...files };
+    for (const [path, content] of Object.entries(rollbackSnapshot)) {
+      if (content === null) delete restoredFiles[path];
+      else restoredFiles[path] = content;
+    }
+    const removePaths = paths.filter((path) => rollbackSnapshot[path] === null);
+    setAssistantBusy(true);
+    try {
+      await persistWorkspaceSnapshot(restoredFiles, removePaths, appliedSnapshot);
+      setFiles(restoredFiles);
+      setOpenTabs((current) => current.filter((path) => Object.hasOwn(restoredFiles, path)));
+      if (!Object.hasOwn(restoredFiles, activeFile)) {
+        const nextFile = Object.keys(restoredFiles)[0];
+        if (nextFile) openFile(nextFile);
+        else setActiveFile('');
+      }
+      setPreviewDocument(buildPreviewDocument(restoredFiles));
+      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'undone', undoConflictPaths: [], undoneAt: timeLabel() } : item));
+      setToast(`Undid changes to ${paths.length} task file${paths.length === 1 ? '' : 's'}`);
+    } catch (error) {
+      setToast(error.message || 'Could not undo this task. Review the workspace and try again.');
+    } finally {
+      setAssistantBusy(false);
+    }
+  };
+
+  const toggleProposalReview = (messageId) => {
+    setMessages((current) => current.map((item) => item.id === messageId ? { ...item, reviewOpen: !item.reviewOpen } : item));
+  };
+
+  const toggleProposalFileList = (messageId) => {
+    setMessages((current) => current.map((item) => item.id === messageId ? { ...item, filesExpanded: !item.filesExpanded } : item));
   };
 
   const discardProposal = (messageId) => {
@@ -789,7 +900,7 @@ function App() {
 
   const toggleProposalChange = (messageId, filePath) => {
     setMessages((current) => current.map((message) => {
-      if (message.id !== messageId || ['applied', 'auto-applied', 'discarded', 'running', 'stale', 'needs-attention'].includes(message.proposalState)) return message;
+      if (message.id !== messageId || ['applied', 'auto-applied', 'discarded', 'running', 'stale', 'needs-attention', 'apply-failed', 'undone'].includes(message.proposalState)) return message;
       const excluded = new Set(message.excludedChangePaths || []);
       if (excluded.has(filePath)) excluded.delete(filePath);
       else excluded.add(filePath);
@@ -1153,20 +1264,33 @@ function App() {
                     </section>}
                     {message.changes?.length > 0 && (
                       <div className="proposal-card">
-                        <div className="proposal-heading"><div className="proposal-icon"><FileCode2 size={14} /></div><div><strong>{message.proposalState === 'auto-applied' ? 'Repair applied' : message.spec ? 'Quest patch ready' : 'Agent task ready'}</strong><span>{message.proposalState === 'auto-applied' ? `${message.changes.length} file${message.changes.length === 1 ? '' : 's'} · covered by the original task approval` : `${message.changes.length - (message.excludedChangePaths?.length || 0)} of ${message.changes.length} file${message.changes.length === 1 ? '' : 's'} selected · inspect each diff, then approve once`}</span></div></div>
-                        <div className="proposal-files">{message.changes.map((change) => <div className="proposal-file" key={change.path}><IconForFile name={change.path} size={13} /><span>{change.path}</span><span className="proposal-change-label">{message.changeReviews?.[change.path]?.isNewFile ? 'A' : 'M'}</span></div>)}</div>
-                        <div className="proposal-diff-list">{message.changes.map((change) => {
+                        <div className="proposal-heading">
+                          <div className="proposal-icon"><FileCode2 size={14} /></div>
+                          <div>
+                            <strong>{['applied', 'needs-attention'].includes(message.proposalState) ? `Edited ${message.changeSummary?.files ?? message.changes.length} file${(message.changeSummary?.files ?? message.changes.length) === 1 ? '' : 's'}` : message.proposalState === 'undone' ? 'Task changes undone' : message.proposalState === 'apply-failed' ? 'Task not saved' : message.proposalState === 'auto-applied' ? 'Repair applied' : message.spec ? 'Quest patch ready' : 'Agent task ready'}</strong>
+                            <span>{['applied', 'needs-attention', 'undone'].includes(message.proposalState)
+                              ? <><i className="diff-added-count">+{message.changeSummary?.added || 0}</i> <i className="diff-removed-count">−{message.changeSummary?.removed || 0}</i> · {message.undoneAt || message.appliedAt || 'now'}</>
+                              : message.proposalState === 'auto-applied' ? `${message.changes.length} file${message.changes.length === 1 ? '' : 's'} · covered by the original task approval` : message.proposalState === 'apply-failed' ? 'No task changes were confirmed as saved · request a fresh patch before retrying' : `${message.changes.length - (message.excludedChangePaths?.length || 0)} of ${message.changes.length} file${message.changes.length === 1 ? '' : 's'} selected · inspect each diff, then approve once`}</span>
+                          </div>
+                          {['applied', 'needs-attention', 'undone'].includes(message.proposalState) && <div className="proposal-header-actions">
+                            {message.proposalState !== 'undone' && message.changeSummary?.files > 0 && <button type="button" disabled={assistantBusy} onClick={() => undoApprovedTask(message)}>Undo</button>}
+                            <button type="button" onClick={() => toggleProposalReview(message.id)}>{message.reviewOpen ? 'Hide review' : 'Review'}</button>
+                          </div>}
+                        </div>
+                        <div className="proposal-files">{(message.filesExpanded ? message.changes : message.changes.slice(0, 3)).map((change) => <div className="proposal-file" key={change.path}><IconForFile name={change.path} size={13} /><span>{change.path}</span><span className="proposal-change-label">{message.changeReviews?.[change.path]?.isNewFile ? 'A' : 'M'}</span></div>)}</div>
+                        {message.changes.length > 3 && <button type="button" className="proposal-expand-files" onClick={() => toggleProposalFileList(message.id)}>{message.filesExpanded ? 'Show fewer files' : `Show ${message.changes.length - 3} more files`} <ChevronDown size={12} /></button>}
+                        {(!['applied', 'needs-attention', 'undone'].includes(message.proposalState) || message.reviewOpen) && <div className="proposal-diff-list">{message.changes.map((change) => {
                           const review = message.changeReviews?.[change.path] || createChangeReview(message.changeBaselines?.[change.path] ?? null, change.content);
                           const included = !(message.excludedChangePaths || []).includes(change.path);
-                          const selectionLocked = ['applied', 'auto-applied', 'discarded', 'running', 'stale', 'needs-attention'].includes(message.proposalState);
+                          const selectionLocked = ['applied', 'auto-applied', 'discarded', 'running', 'stale', 'needs-attention', 'apply-failed', 'undone'].includes(message.proposalState);
                           return <section className={`proposal-diff-file ${included ? '' : 'excluded'}`} key={change.path}>
                             <div className="proposal-diff-title"><code title={change.path}>{change.path}</code><label className="proposal-diff-selection" title={`${included ? 'Exclude' : 'Include'} this file ${included ? 'from' : 'in'} the approved task`}><input type="checkbox" checked={included} disabled={assistantBusy || selectionLocked} onChange={() => toggleProposalChange(message.id, change.path)} /><span>Include</span></label><span><i className="diff-added-count">+{review.added}</i> <i className="diff-removed-count">−{review.removed}</i></span></div>
                             <div className="proposal-diff-lines">{review.lines.map((line, index) => <div className={`proposal-diff-line diff-${line.type}`} key={`${line.type}-${index}`}><span>{line.type === 'added' ? '+' : line.type === 'removed' ? '−' : line.type === 'omitted' ? '…' : ' '}</span><code>{line.type === 'omitted' ? `${line.count} lines omitted` : line.text || ' '}</code></div>)}</div>
                           </section>;
-                        })}</div>
+                        })}</div>}
                         {message.commands?.length > 0 ? <div className="proposal-check-list"><strong>Checks after approval</strong>{message.commands.map((item) => <div key={item.command}><Terminal size={11} /><code>{item.command}</code></div>)}</div> : <div className="proposal-check-hint">After approval, Codereo will detect safe test/build checks in the project and run them in desktop mode.</div>}
                         {message.blockedCommands?.length > 0 && <div className="blocked-command-note"><strong>Requires explicit approval · never auto-run</strong>{message.blockedCommands.map((command, index) => <div className="blocked-command-row" key={`${command}-${index}`}><code title={command}>{command}</code>{window.codereoDesktop?.runConfirmedCommand ? <button type="button" disabled={assistantBusy || !desktopWorkspaceRoot} title={!desktopWorkspaceRoot ? 'Open a desktop workspace first' : 'Review in the desktop confirmation dialog'} onClick={() => runConfirmedAgentCommand(message.id, command)}>Review &amp; run</button> : <span>Desktop only</span>}</div>)}{message.manualCommandResults?.map((result, index) => <div className="manual-command-result" key={`${result.command}-${index}`}><span className={result.ok ? 'check-pass' : result.canceled ? '' : 'check-fail'}>{result.canceled ? 'Canceled' : result.timedOut ? 'Timed out' : result.ok ? 'Finished' : `Exit ${result.exitCode ?? -1}`}</span><code>{result.command}</code><pre>{result.output || (result.ok ? 'Command completed.' : '')}</pre></div>)}</div>}
-                        {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'stale' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Workspace files changed after review{message.stalePaths?.length ? `: ${message.stalePaths.join(', ')}` : ''}. Request a fresh patch before applying.</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy || message.changes.length <= (message.excludedChangePaths?.length || 0)} onClick={() => approveAgentTask(message)}><Check size={13} /> Approve {message.changes.length - (message.excludedChangePaths?.length || 0)} file{message.changes.length - (message.excludedChangePaths?.length || 0) === 1 ? '' : 's'} & verify</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
+                        {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'undone' ? <div className="proposal-result"><RefreshCw size={13} /> Task changes restored to the pre-approval snapshot</div> : message.proposalState === 'stale' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Workspace files changed after review{message.stalePaths?.length ? `: ${message.stalePaths.join(', ')}` : ''}. Request a fresh patch before applying.</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : message.proposalState === 'apply-failed' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> The save could not be confirmed. Inspect the workspace, save it, then request a fresh patch.<button type="button" className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Dismiss</button></div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy || message.changes.length <= (message.excludedChangePaths?.length || 0)} onClick={() => approveAgentTask(message)}><Check size={13} /> {'Approve task & verify'}</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
                         {message.verification && <div className={`verification-card ${message.verification.ok ? 'passed' : 'failed'}`}><strong>{message.verification.ok ? 'Verification' : 'Checks need attention'}</strong>{message.verification.message && <p>{message.verification.message}</p>}{(message.verification.results || []).map((result, index) => <div className="verification-result" key={`${result.command}-${index}`}><span className={result.exitCode === 0 ? 'check-pass' : 'check-fail'}>{result.exitCode === 0 ? 'PASS' : 'FAIL'}</span><code>{result.command}</code>{result.output && <pre>{result.output.slice(0, 1600)}</pre>}</div>)}</div>}
                       </div>
                     )}
