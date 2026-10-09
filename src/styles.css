@@ -315,3 +315,79 @@ kbd { display: inline-flex; align-items: center; justify-content: center; min-wi
 .proposal-header-actions button:disabled { opacity: .55; cursor: wait; }
 .proposal-expand-files { display: flex; align-items: center; gap: 4px; margin: -3px 9px 7px; padding: 3px 0; border: 0; color: #a5ada1; background: transparent; font-size: 7px; cursor: pointer; }
 .proposal-expand-files:hover { color: #d0e4c7; }
+
+/* Task activity and source-change context bring the agent workflow into the IDE shell. */
+.activity-feed-panel { padding-inline: 12px; }
+.activity-feed-panel .panel-title-row { margin: 0 -12px 12px; }
+.activity-feed-heading { display: flex; align-items: center; justify-content: space-between; padding: 12px 11px; border: 1px solid rgba(183,239,145,.12); border-radius: 6px; background: linear-gradient(135deg, rgba(183,239,145,.055), rgba(255,255,255,.012)); }
+.activity-feed-heading > div { display: flex; flex-direction: column; gap: 5px; }
+.activity-feed-heading > div > span { color: #82937c; font: 6px var(--mono); letter-spacing: .12em; }
+.activity-feed-heading strong { color: #d1ddca; font-size: 12px; font-weight: 600; }
+.activity-count { display: grid; width: 23px; height: 23px; place-items: center; border: 1px solid rgba(183,239,145,.16); border-radius: 50%; color: #b8d8a5; background: rgba(183,239,145,.06); font: 9px var(--mono); }
+.activity-feed-description { margin: 8px 2px 12px !important; color: #899186 !important; font-size: 9px !important; }
+.task-history-list { display: flex; flex-direction: column; gap: 5px; }
+.task-history-item { display: grid; width: 100%; min-width: 0; grid-template-columns: 8px minmax(0,1fr) auto; align-items: start; gap: 7px; padding: 9px 7px; border: 1px solid rgba(255,255,255,.055); border-radius: 5px; color: #aab3a5; background: rgba(255,255,255,.018); text-align: left; cursor: pointer; }
+.task-history-item:hover { border-color: rgba(183,239,145,.18); background: rgba(183,239,145,.035); }
+.task-history-dot { width: 7px; height: 7px; margin-top: 3px; border-radius: 50%; background: #91a083; box-shadow: 0 0 8px rgba(145,160,131,.25); }
+.task-history-dot.status-applied,.task-history-dot.status-auto-applied { background: #a8d58f; box-shadow: 0 0 8px rgba(168,213,143,.35); }
+.task-history-dot.status-needs-attention,.task-history-dot.status-stale,.task-history-dot.status-apply-failed { background: #e4a06f; }
+.task-history-dot.status-undone { background: #9bb9dc; }
+.task-history-dot.status-running { animation: pulse-dot 1.1s ease-in-out infinite alternate; background: #c5b0f3; }
+@keyframes pulse-dot { to { opacity: .4; } }
+.task-history-copy { display: flex; min-width: 0; flex-direction: column; gap: 5px; }
+.task-history-copy strong { display: -webkit-box; overflow: hidden; color: #bec8b7; font-size: 9px; font-weight: 550; line-height: 1.45; text-overflow: ellipsis; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.task-history-copy small { color: #778173; font: 7px var(--mono); }
+.task-history-status { align-self: start; padding: 3px 4px; border: 1px solid rgba(255,255,255,.06); border-radius: 3px; color: #899384; font-size: 7px; white-space: nowrap; }
+.task-history-status.status-applied,.task-history-status.status-auto-applied { border-color: rgba(168,213,143,.12); color: #a8d58f; }
+.task-history-status.status-needs-attention,.task-history-status.status-stale,.task-history-status.status-apply-failed { border-color: rgba(228,160,111,.14); color: #e4a06f; }
+.task-history-status.status-undone { border-color: rgba(155,185,220,.14); color: #9bb9dc; }
+.activity-empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 27px 13px; border: 1px dashed rgba(183,239,145,.12); border-radius: 6px; color: #7f897a; text-align: center; }
+.activity-empty-state .utility-hero-icon { width: 36px; height: 36px; }
+.activity-empty-state > strong { color: #bbc7b4; font-size: 10px; }
+.activity-empty-state > span { max-width: 170px; font-size: 8px; line-height: 1.5; }
+.activity-empty-state .subtle-button { margin-top: 3px; }
+.activity-feed-footer { display: flex; align-items: center; gap: 6px; margin-top: 14px; padding: 9px 2px; border-top: 1px solid rgba(255,255,255,.05); color: #707a70; font-size: 7px; }
+.activity-feed-footer svg { color: #8cab7b; }
+.source-branch-card { display: flex; flex-direction: column; align-items: flex-start; gap: 9px; padding: 11px; border: 1px solid rgba(255,255,255,.06); border-radius: 6px; background: rgba(255,255,255,.018); }
+.source-branch-card > span,.source-change-heading { color: #879082; font: 7px var(--mono); letter-spacing: .09em; }
+.source-branch-card > small { color: #778174; font-size: 7px; }
+.source-change-heading { display: flex; justify-content: space-between; margin: 18px 1px 6px; }
+.source-change-heading strong { font: inherit; }
+.source-change-heading > span { color: #a3b995; }
+.source-change-list { display: flex; flex-direction: column; gap: 2px; max-height: 42vh; overflow: auto; }
+.source-change-list button { display: flex; min-width: 0; align-items: center; gap: 7px; min-height: 27px; padding: 4px 6px; border: 0; border-radius: 4px; color: #aeb7a8; background: transparent; text-align: left; cursor: pointer; }
+.source-change-list button:hover { background: rgba(255,255,255,.045); }
+.source-change-list button > span { flex: 1; min-width: 0; overflow: hidden; font: 8px var(--mono); text-overflow: ellipsis; white-space: nowrap; }
+.change-kind { min-width: 14px; color: #dfbd72; font: 8px var(--mono); text-align: center; }
+.change-kind.change-a { color: #9bd39b; }
+.change-kind.change-d { color: #e59094; }
+.source-clean-state { display: flex; align-items: center; gap: 7px; padding: 10px 7px; border: 1px solid rgba(155,207,135,.09); border-radius: 4px; color: #8cab7b; font-size: 8px; }
+.source-save-button { margin-top: 12px; }
+
+.task-activity-card { margin: 7px 8px 8px; border: 1px solid rgba(183,239,145,.09); border-radius: 5px; background: rgba(183,239,145,.018); }
+.task-activity-toggle { display: flex; width: 100%; align-items: center; justify-content: space-between; padding: 7px 8px; border: 0; color: #99a78e; background: transparent; font-size: 8px; cursor: pointer; }
+.task-activity-toggle > span { display: flex; align-items: center; gap: 5px; }
+.task-activity-toggle > span > svg { color: #a5cc8d; }
+.task-activity-toggle small { margin-left: 3px; color: #657160; font: 6px var(--mono); }
+.task-activity-toggle > svg { transition: transform .15s ease; }
+.task-activity-toggle > svg.collapsed { transform: rotate(-90deg); }
+.task-timeline-list { display: flex; flex-direction: column; gap: 0; margin: 0; padding: 0 8px 7px; list-style: none; }
+.task-timeline-event { position: relative; display: grid; grid-template-columns: 17px minmax(0,1fr) auto; gap: 6px; align-items: start; min-height: 31px; padding: 5px 0; }
+.task-timeline-event:not(:last-child)::after { content: ''; position: absolute; top: 19px; bottom: -6px; left: 7px; width: 1px; background: rgba(183,239,145,.12); }
+.task-timeline-marker { z-index: 1; display: grid; width: 15px; height: 15px; place-items: center; border: 1px solid rgba(151,190,132,.14); border-radius: 50%; color: #a3ce8a; background: #171b18; }
+.task-timeline-event.timeline-error .task-timeline-marker { border-color: rgba(228,160,111,.16); color: #e4a06f; }
+.task-timeline-event.timeline-undone .task-timeline-marker { border-color: rgba(155,185,220,.16); color: #9bb9dc; }
+.task-timeline-copy { display: flex; min-width: 0; flex-direction: column; gap: 3px; }
+.task-timeline-copy strong { overflow: hidden; color: #b4c0ac; font-size: 7px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.task-timeline-copy small { color: #778274; font-size: 6px; line-height: 1.4; overflow-wrap: anywhere; }
+.task-timeline-event time { padding-top: 2px; color: #64705f; font: 7px var(--mono); white-space: nowrap; }
+@media (min-width: 1200px) {
+  .message-bubble { font-size: 11px; }
+  .message-meta { font-size: 10px; }
+  .assistant-mode-switch button { font-size: 10px; }
+  .agent-safety-note { font-size: 9px; }
+  .proposal-heading strong { font-size: 10px; }
+  .proposal-heading span { font-size: 9px; }
+  .proposal-file { font-size: 9px; }
+  .proposal-actions button { font-size: 9px; }
+}
