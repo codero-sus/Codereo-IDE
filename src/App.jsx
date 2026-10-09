@@ -318,6 +318,9 @@ function App() {
   const [paletteQuery, setPaletteQuery] = useState('');
   const [paletteIndex, setPaletteIndex] = useState(0);
   const [assistantVisible, setAssistantVisible] = useState(true);
+  const [workspaceMode, setWorkspaceMode] = useState('agent');
+  const [recentConversations, setRecentConversations] = useState([]);
+  const [activeConversationId, setActiveConversationId] = useState('current');
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [toast, setToast] = useState('');
   const [health, setHealth] = useState({ ok: false, aiConfigured: false, defaultProvider: 'openai-compatible', providers: [] });
@@ -333,6 +336,7 @@ function App() {
   const [mindState, setMindState] = useState({ memoryCount: 0, memories: [], notes: [], tasks: [], goals: [], agents: [] });
   const [desktopBridgeReady, setDesktopBridgeReady] = useState(() => Boolean(window.codereoDesktop?.isAvailable));
   const [assistantMode, setAssistantMode] = useState('agent');
+  const [approvalMenuOpen, setApprovalMenuOpen] = useState(false);
   const [assistantDraft, setAssistantDraft] = useState('');
   const [assistantBusy, setAssistantBusy] = useState(false);
   const [savingQuestId, setSavingQuestId] = useState('');
@@ -362,6 +366,12 @@ function App() {
     const prompt = [...messages.slice(0, index)].reverse().find((item) => item.role === 'user')?.content || 'Agent task';
     return [{ id: message.id, prompt, state: message.proposalState || 'ready', files: message.changeSummary?.files ?? message.changes?.length ?? 0, time: message.appliedAt || message.time }];
   }).reverse().slice(0, 16), [messages]);
+  const conversationNavItems = useMemo(() => {
+    const firstPrompt = messages.find((item) => item.role === 'user')?.content;
+    const current = firstPrompt ? [{ id: activeConversationId, title: firstPrompt, active: true }] : [];
+    const archived = recentConversations.filter((conversation) => conversation.id !== activeConversationId).map((conversation) => ({ id: conversation.id, title: conversation.title, active: false }));
+    return [...current, ...archived].slice(0, 10);
+  }, [messages, recentConversations, activeConversationId]);
   const desktopAvailable = desktopBridgeReady || Boolean(window.codereoDesktop?.isAvailable);
   const activeProviderMetadata = PROVIDER_OPTIONS.find((provider) => provider.id === activeProvider) || PROVIDER_OPTIONS[0];
   const activeProviderStatus = health.providers?.find((provider) => provider.id === activeProvider);
@@ -678,6 +688,50 @@ function App() {
     }
   };
 
+
+  const archiveActiveConversation = () => {
+    const firstPrompt = messages.find((item) => item.role === 'user')?.content;
+    if (!firstPrompt) return;
+    const id = activeConversationId === 'current' ? crypto.randomUUID() : activeConversationId;
+    const conversation = { id, title: firstPrompt.trim().slice(0, 96), messages: [...messages].slice(-40), time: timeLabel() };
+    setRecentConversations((current) => [conversation, ...current.filter((item) => item.id !== id)].slice(0, 10));
+  };
+
+  const startNewConversation = () => {
+    if (assistantBusy) return;
+    archiveActiveConversation();
+    setMessages([{ id: `welcome-${crypto.randomUUID()}`, role: 'assistant', content: 'New task ready. Describe the outcome and Codereo will work through the plan, patch, and checks with you.', time: 'now', suggestions: ['Explain this project', 'Fix a bug', 'Build a feature'] }]);
+    setActiveConversationId('current');
+    setAssistantDraft('');
+    setAssistantMode('agent');
+    setWorkspaceMode('agent');
+    setAssistantVisible(true);
+    window.setTimeout(() => chatInputRef.current?.focus(), 30);
+  };
+
+  const openRecentConversation = (conversationId) => {
+    if (assistantBusy) return;
+    const conversation = recentConversations.find((item) => item.id === conversationId);
+    if (!conversation) return;
+    archiveActiveConversation();
+    setMessages([...conversation.messages]);
+    setActiveConversationId(conversation.id);
+    setAssistantDraft('');
+    setAssistantMode('agent');
+    setWorkspaceMode('agent');
+    setAssistantVisible(true);
+  };
+
+  const switchToCoding = () => {
+    setWorkspaceMode('coding');
+    setActiveActivity('explorer');
+    setAssistantVisible(true);
+  };
+
+  const switchToAgent = () => {
+    setWorkspaceMode('agent');
+    setAssistantVisible(true);
+  };
 
   const runConfirmedAgentCommand = async (messageId, command) => {
     const bridge = window.codereoDesktop;
@@ -1095,7 +1149,7 @@ function App() {
       : renderTree(fileTree);
 
   return (
-    <div className={`app-shell ${assistantVisible ? '' : 'assistant-hidden'}`}>
+    <div className={`app-shell ${assistantVisible ? '' : 'assistant-hidden'} ${workspaceMode === 'agent' ? 'agent-shell' : ''}`}>
       <header className="topbar">
         <div className="brand-lockup">
           <div className="brand-mark"><Sparkles size={15} strokeWidth={2.4} /></div>
@@ -1118,15 +1172,15 @@ function App() {
             <span className="connection-dot" />
             <span>{activeProviderStatus?.configured ? activeProviderMetadata.label : `${activeProviderMetadata.label} setup`}</span>
           </div>
-          <button className="icon-button assistant-toggle" title={assistantVisible ? 'Hide assistant' : 'Show assistant'} onClick={() => setAssistantVisible((current) => !current)}>
+          {workspaceMode === 'coding' && <button className="icon-button assistant-toggle" title={assistantVisible ? 'Hide assistant' : 'Show assistant'} onClick={() => setAssistantVisible((current) => !current)}>
             <Bot size={16} />
-          </button>
+          </button>}
           <button className="icon-button" title="AI settings" onClick={() => setSettingsOpen(true)}><Settings2 size={16} /></button>
           <div className="profile-avatar" title="Local workspace">C</div>
         </div>
       </header>
 
-      <div className="workspace-grid">
+      <div className={`workspace-grid ${workspaceMode === 'agent' ? 'agent-workbench' : ''}`}>
         <nav className="activity-bar" aria-label="Primary navigation">
           <div className="activity-group">
             <button className={`activity-button ${activeActivity === 'explorer' ? 'active' : ''}`} title="Explorer" onClick={() => setActiveActivity('explorer')}><Files size={19} /></button>
@@ -1142,7 +1196,41 @@ function App() {
         </nav>
 
         <aside className="explorer-panel">
-          {activeActivity === 'explorer' || activeActivity === 'search' ? (
+          {workspaceMode === 'agent' ? (
+            <div className="agent-sidebar">
+              <div className="agent-sidebar-switch">
+                <button type="button" onClick={switchToCoding}><Code2 size={13} /> Coding</button>
+                <button type="button" className="active" onClick={switchToAgent}><Sparkles size={13} /> Agent</button>
+              </div>
+              <button type="button" className="agent-new-task" onClick={startNewConversation}><Plus size={15} /> New Task</button>
+              <nav className="agent-primary-nav" aria-label="Agent workspace">
+                <button type="button" onClick={switchToCoding}><LayoutGrid size={15} /><span>Projects</span><small>Beta</small></button>
+                <button type="button" onClick={() => { switchToAgent(); setAssistantMode('ask'); }}><MessageSquareText size={15} /><span>Discussion</span><small>Beta</small></button>
+                <button type="button" onClick={() => { switchToCoding(); setActiveActivity('search'); window.setTimeout(() => document.querySelector('.file-search-input')?.focus(), 60); }}><Search size={15} /><span>Search</span></button>
+              </nav>
+              <section className="agent-sidebar-section agent-folder-section">
+                <div className="agent-sidebar-section-heading"><span>Folders</span><button type="button" title="Open a project folder" onClick={openWorkspace}><Plus size={13} /></button></div>
+                <button type="button" className="agent-folder-item" onClick={switchToCoding}><Folder size={14} /><span>{workspaceName}</span><ChevronRight size={12} /></button>
+              </section>
+              <section className="agent-sidebar-section agent-recent-section">
+                <div className="agent-sidebar-section-heading"><span>Recent conversations</span><button type="button" title="Start a new task" onClick={startNewConversation}><Plus size={13} /></button></div>
+                <div className="agent-recent-list">{conversationNavItems.length ? conversationNavItems.map((conversation) => <button type="button" key={conversation.id} className={`agent-recent-item ${conversation.active ? 'active' : ''}`} disabled={assistantBusy} onClick={() => conversation.active ? document.querySelector('.chat-transcript')?.scrollTo({ top: document.querySelector('.chat-transcript')?.scrollHeight || 0, behavior: 'smooth' }) : openRecentConversation(conversation.id)}><MessageSquareText size={13} /><span title={conversation.title}>{conversation.title}</span></button>) : <div className="agent-no-recent">Your new tasks will appear here.</div>}</div>
+              </section>
+              <div className="agent-sidebar-footer">
+                <button type="button" onClick={() => { switchToCoding(); setActiveActivity('mind'); }}><BookOpen size={14} /><span>Knowledge Center</span></button>
+                <button type="button" onClick={() => setToast('Sites is planned for a future Codereo release.')}><Globe2 size={14} /><span>Sites</span><small>Beta</small></button>
+                <button type="button" onClick={() => setToast('Automations is planned for a future Codereo release.')}><Activity size={14} /><span>Automations</span></button>
+                <button type="button" onClick={() => setToast('Extensions is planned for a future Codereo release.')}><Braces size={14} /><span>Extensions</span></button>
+                <div className="agent-sidebar-brand"><div className="brand-mark"><Sparkles size={12} /></div><span>Codereo IDE</span><span className="agent-sidebar-user">C</span></div>
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="agent-sidebar-switch coding-sidebar-switch">
+                <button type="button" className="active" onClick={switchToCoding}><Code2 size={13} /> Coding</button>
+                <button type="button" onClick={switchToAgent}><Sparkles size={13} /> Agent</button>
+              </div>
+              {activeActivity === 'explorer' || activeActivity === 'search' ? (
             <>
               <div className="panel-title-row">
                 <span>{activeActivity === 'search' ? 'SEARCH' : 'EXPLORER'}</span>
@@ -1194,6 +1282,8 @@ function App() {
               })}</div> : <div className="activity-empty-state"><div className="utility-hero-icon"><Activity size={21} /></div><strong>No tasks yet</strong><span>Approved coding tasks and their checkpoints will appear here.</span><button className="subtle-button" onClick={() => { setAssistantVisible(true); setAssistantMode('agent'); window.setTimeout(() => chatInputRef.current?.focus(), 30); }}><Sparkles size={13} /> Start a task</button></div>}
               <div className="activity-feed-footer"><ShieldCheck size={13} /><span>Task history stays in this conversation.</span></div>
             </div>
+              )}
+            </>
           )}
         </aside>
 
@@ -1290,7 +1380,7 @@ function App() {
           <aside className="assistant-panel">
             <div className="assistant-header">
               <div className="assistant-title"><div className="assistant-mark"><Sparkles size={14} /></div><div><strong>Codereo Agent</strong><span>Agentic coding partner</span></div></div>
-              <div className="assistant-header-actions"><button className="mini-icon-button" title="New conversation" onClick={() => setMessages([{ id: crypto.randomUUID(), role: 'assistant', content: 'New conversation ready. What should we work on?', time: 'now', suggestions: ['Explain this project', 'Add a feature'] }])}><Plus size={15} /></button><button className="mini-icon-button" title="Hide assistant" onClick={() => setAssistantVisible(false)}><PanelRightClose size={15} /></button></div>
+              <div className="assistant-header-actions">{workspaceMode === 'agent' && <button className="mini-icon-button" title="Switch to Coding workspace" onClick={switchToCoding}><Code2 size={15} /></button>}<button className="mini-icon-button" title="New task" onClick={startNewConversation}><Plus size={15} /></button>{workspaceMode === 'coding' && <button className="mini-icon-button" title="Hide assistant" onClick={() => setAssistantVisible(false)}><PanelRightClose size={15} /></button>}</div>
             </div>
             <div className="assistant-model-row" title="Choose provider in AI settings"><div className={`model-status-dot ${activeProviderStatus?.configured ? 'online' : ''}`} /><span>{activeProviderStatus?.configured ? `${activeProviderMetadata.label} · ${activeProviderStatus.model}` : `${activeProviderMetadata.label} setup required`}</span><ChevronDown size={13} onClick={() => setSettingsOpen(true)} /></div>
             <div className="assistant-mode-switch" aria-label="Assistant mode">
@@ -1371,7 +1461,20 @@ function App() {
             <div className="assistant-context-row"><div className="context-file-icon"><Files size={13} /></div><span>{allFilePaths.length} workspace files · {mindState.memoryCount || 0} memories</span><label className="memory-recall-control" title="Include relevant local memory excerpts with this provider request"><input type="checkbox" checked={memoryEnabled} disabled={!activeAgentCanUseMemory} onChange={(event) => updateMemoryEnabled(event.target.checked)} /><span>Recall</span></label><button title="Manage local memory" onClick={() => setActiveActivity('mind')}><Info size={13} /></button></div>
             <form className="chat-composer" onSubmit={(event) => { event.preventDefault(); sendAssistantMessage(); }}>
               <textarea ref={chatInputRef} value={assistantDraft} onChange={(event) => setAssistantDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey) { event.preventDefault(); sendAssistantMessage(); } }} placeholder={assistantMode === 'ask' ? 'Ask about your code…' : assistantMode === 'plan' ? 'What would you like to plan?' : assistantMode === 'quest' ? 'Describe the outcome; Quest will spec it and map the steps…' : 'Describe a change to make…'} rows={2} />
-              <div className="composer-bottom"><div className="composer-hint"><span>↵</span> to send · <span>⇧ ↵</span> for new line</div><button type="submit" className="send-button" aria-label="Send message" disabled={!assistantDraft.trim() || assistantBusy}><Send size={14} /></button></div>
+              <div className="composer-bottom">
+                <div className="composer-controls-left">
+                  <div className="approval-mode-wrap">
+                    <button type="button" className="approval-mode-button" aria-expanded={approvalMenuOpen} onClick={() => setApprovalMenuOpen((open) => !open)}><ShieldCheck size={13} /><span>{assistantMode === 'plan' ? 'Plan only' : assistantMode === 'ask' ? 'Ask only' : 'Ask for approval'}</span><ChevronDown size={12} /></button>
+                    {approvalMenuOpen && <div className="approval-mode-menu" role="menu" aria-label="Task approval mode">
+                      <button type="button" role="menuitemradio" aria-checked={assistantMode !== 'plan' && assistantMode !== 'ask'} onClick={() => { setAssistantMode('agent'); setApprovalMenuOpen(false); }}><ShieldCheck size={13} /><span><strong>Ask for approval</strong><small>Approve once before changes; safe checks follow.</small></span>{assistantMode !== 'plan' && assistantMode !== 'ask' && <Check size={13} />}</button>
+                      <button type="button" role="menuitemradio" aria-checked={assistantMode === 'plan'} onClick={() => { setAssistantMode('plan'); setApprovalMenuOpen(false); }}><Circle size={13} /><span><strong>Plan only</strong><small>Discuss steps without proposing file edits.</small></span>{assistantMode === 'plan' && <Check size={13} />}</button>
+                      <button type="button" role="menuitemradio" aria-checked={assistantMode === 'ask'} onClick={() => { setAssistantMode('ask'); setApprovalMenuOpen(false); }}><MessageSquareText size={13} /><span><strong>Ask only</strong><small>Answer questions without preparing a patch.</small></span>{assistantMode === 'ask' && <Check size={13} />}</button>
+                    </div>}
+                  </div>
+                  <span className="composer-shortcut"><span>↵</span> send · <span>⇧ ↵</span> new line</span>
+                </div>
+                <div className="composer-controls-right"><span className="composer-auto-badge"><Sparkles size={11} /> Auto</span><button type="submit" className="send-button" aria-label="Send message" disabled={!assistantDraft.trim() || assistantBusy}><Send size={14} /></button></div>
+              </div>
             </form>
             <div className="assistant-footer"><span><ShieldCheck size={12} /> Private by default</span><button onClick={() => setSettingsOpen(true)}>Configure AI</button></div>
           </aside>
