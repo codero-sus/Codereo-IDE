@@ -53,7 +53,6 @@ import {
   SquareTerminal,
   Terminal,
   X,
-  Zap,
 } from 'lucide-react';
 import MindPanel from './MindPanel.jsx';
 import { createChangeReview, findStaleProposalPaths, selectProposalChanges } from './change-review.mjs';
@@ -251,6 +250,48 @@ function timeLabel() {
   return new Intl.DateTimeFormat(undefined, { hour: 'numeric', minute: '2-digit' }).format(new Date());
 }
 
+function createTaskTimeline(message) {
+  const events = [];
+  if (message.taskApprovedAt) {
+    events.push({ id: 'approved', title: 'Task approved', detail: `${message.approvedFileCount || message.changeSummary?.files || message.changes?.length || 0} file changes selected`, time: message.taskApprovedAt, state: 'done' });
+  }
+  if (message.patchAppliedAt) {
+    events.push({ id: 'applied', title: 'Changes applied', detail: `${message.changeSummary?.files ?? message.changes?.length ?? 0} files saved to the workspace`, time: message.patchAppliedAt, state: 'done' });
+  }
+  if (message.repairIterations) {
+    events.push({ id: 'repairs', title: 'Agent repair passes', detail: `${message.repairIterations} repair pass${message.repairIterations === 1 ? '' : 'es'} completed under the original approval`, state: 'done' });
+  }
+  const results = message.verification?.results || [];
+  results.forEach((result, index) => {
+    const state = result.exitCode === 0 && !result.timedOut ? 'done' : 'error';
+    events.push({ id: `check-${index}`, title: result.command || `Check ${index + 1}`, detail: result.timedOut ? 'Timed out' : `Exit code ${result.exitCode ?? -1}`, state });
+  });
+  if (message.verification && !results.length) {
+    const verificationMessage = message.verification.message || '';
+    const title = !message.verification.ok
+      ? 'Verification needs attention'
+      : /preview/i.test(verificationMessage)
+        ? 'Preview refreshed'
+        : /no safe|no .* command/i.test(verificationMessage)
+          ? 'No automated check detected'
+          : 'Verification completed';
+    events.push({
+      id: 'verification',
+      title,
+      detail: verificationMessage || 'No check output was returned.',
+      state: message.verification.ok ? 'done' : 'error',
+    });
+  }
+  if (message.proposalState === 'applied') {
+    const checked = results.length > 0 || /preview/i.test(message.verification?.message || '');
+    events.push({ id: 'complete', title: checked ? 'Task verified' : 'Task applied', detail: checked ? 'The available checks completed successfully.' : 'No automated validation was available for this workspace.', time: message.appliedAt, state: 'done' });
+  }
+  else if (message.proposalState === 'needs-attention') events.push({ id: 'attention', title: 'Checks need attention', detail: 'Review the verification output before continuing.', time: message.appliedAt, state: 'error' });
+  else if (message.proposalState === 'running') events.push({ id: 'running', title: 'Working on the approved task', detail: 'Applying changes and checking the workspace.', state: 'running' });
+  if (message.proposalState === 'undone') events.push({ id: 'undone', title: 'Task changes undone', detail: 'The pre-approval snapshot was restored.', time: message.undoneAt, state: 'undone' });
+  return events;
+}
+
 function App() {
   const [files, setFiles] = useState(readWorkspace);
   const [savedFiles, setSavedFiles] = useState(readWorkspace);
@@ -309,13 +350,18 @@ function App() {
   const terminalInputRef = useRef(null);
   const chatInputRef = useRef(null);
 
-  const dirty = useMemo(() => {
+  const localChanges = useMemo(() => {
     const filePaths = new Set([...Object.keys(files), ...Object.keys(savedFiles)]);
-    return [...filePaths].some((filePath) => files[filePath] !== savedFiles[filePath]);
+    return [...filePaths].filter((filePath) => files[filePath] !== savedFiles[filePath]).sort();
   }, [files, savedFiles]);
   const isActiveFileDirty = files[activeFile] !== savedFiles[activeFile];
   const fileTree = useMemo(() => createTree(Object.keys(files)), [files]);
   const allFilePaths = useMemo(() => Object.keys(files).sort(), [files]);
+  const taskHistory = useMemo(() => messages.flatMap((message, index) => {
+    if (message.role !== 'assistant' || message.proposalState === 'auto-applied' || (!message.changes?.length && !message.spec)) return [];
+    const prompt = [...messages.slice(0, index)].reverse().find((item) => item.role === 'user')?.content || 'Agent task';
+    return [{ id: message.id, prompt, state: message.proposalState || 'ready', files: message.changeSummary?.files ?? message.changes?.length ?? 0, time: message.appliedAt || message.time }];
+  }).reverse().slice(0, 16), [messages]);
   const desktopAvailable = desktopBridgeReady || Boolean(window.codereoDesktop?.isAvailable);
   const activeProviderMetadata = PROVIDER_OPTIONS.find((provider) => provider.id === activeProvider) || PROVIDER_OPTIONS[0];
   const activeProviderStatus = health.providers?.find((provider) => provider.id === activeProvider);
@@ -705,7 +751,8 @@ function App() {
     setFiles(workingFiles);
     setOpenTabs((current) => [...new Set([...current, ...validChanges.map(({ path }) => path)])]);
     openFile(firstPath);
-    setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'running', rollbackSnapshot: { ...rollbackSnapshot } } : item));
+    const taskApprovedAt = timeLabel();
+    setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'running', rollbackSnapshot: { ...rollbackSnapshot }, taskApprovedAt, approvedFileCount: validChanges.length, activityOpen: true } : item));
     setAssistantBusy(true);
     let iterations = 0;
     let verification = { ok: false, results: [], message: '' };
@@ -714,6 +761,8 @@ function App() {
     try {
       await persistWorkspaceSnapshot(workingFiles, [], diskBaselines);
       workspacePersisted = true;
+      const patchAppliedAt = timeLabel();
+      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, patchAppliedAt } : item));
       if (workingFiles['index.html']) {
         setPreviewDocument(buildPreviewDocument(workingFiles));
         setPanelTab('output');
@@ -877,7 +926,8 @@ function App() {
         else setActiveFile('');
       }
       setPreviewDocument(buildPreviewDocument(restoredFiles));
-      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'undone', undoConflictPaths: [], undoneAt: timeLabel() } : item));
+      const undoneAt = timeLabel();
+      setMessages((current) => current.map((item) => item.id === message.id ? { ...item, proposalState: 'undone', undoConflictPaths: [], undoneAt, activityOpen: true } : item));
       setToast(`Undid changes to ${paths.length} task file${paths.length === 1 ? '' : 's'}`);
     } catch (error) {
       setToast(error.message || 'Could not undo this task. Review the workspace and try again.');
@@ -1118,23 +1168,31 @@ function App() {
           ) : activeActivity === 'mind' ? (
             <MindPanel files={files} workspaceName={workspaceName} onOpenFile={openFile} selectedAgentId={activeAgentId} onSelectAgent={selectAgent} memoryEnabled={memoryEnabled} onMemoryToggle={updateMemoryEnabled} onStateChange={setMindState} mindState={mindState} />
           ) : activeActivity === 'source' ? (
-            <div className="utility-panel">
-              <div className="panel-title-row"><span>SOURCE CONTROL</span><button className="mini-icon-button" onClick={() => setActiveActivity('explorer')}><X size={14} /></button></div>
-              <div className="utility-hero-icon"><GitBranch size={21} /></div>
-              <h3>Local changes</h3>
-              <p>{dirty ? 'Your workspace has unsaved edits.' : 'Your workspace is up to date.'}</p>
-              <div className="branch-chip"><GitBranch size={13} /> main <span className="branch-dot" /></div>
-              <button className="subtle-button" onClick={saveWorkspace}><ArrowDownToLine size={14} /> Save workspace</button>
-              <div className="utility-note">Git integration is planned for a later milestone. No repository data is uploaded.</div>
+            <div className="utility-panel source-control-panel">
+              <div className="panel-title-row"><span>SOURCE CONTROL</span><button className="mini-icon-button" title="Back to files" onClick={() => setActiveActivity('explorer')}><X size={14} /></button></div>
+              <div className="source-branch-card"><span>WORKSPACE BRANCH</span><div className="branch-chip"><GitBranch size={13} /> main <span className="branch-dot" /></div><small>{desktopWorkspaceRoot ? 'Local desktop folder' : 'Browser workspace'}</small></div>
+              <div className="source-change-heading"><strong>UNSAVED FILES</strong><span>{localChanges.length}</span></div>
+              {localChanges.length ? <div className="source-change-list">{localChanges.map((filePath) => {
+                const kind = !Object.hasOwn(savedFiles, filePath) ? 'A' : !Object.hasOwn(files, filePath) ? 'D' : 'M';
+                return <button type="button" key={filePath} onClick={() => openFile(filePath)}><IconForFile name={filePath} size={13} /><span title={filePath}>{filePath}</span><i className={`change-kind change-${kind.toLowerCase()}`}>{kind}</i></button>;
+              })}</div> : <div className="source-clean-state"><CircleCheck size={17} /><span>No unsaved file changes</span></div>}
+              <button className="subtle-button source-save-button" onClick={saveWorkspace}><ArrowDownToLine size={14} /> Save workspace</button>
+              <div className="utility-note">Saving writes only to this workspace. Git commit and push actions are not run from this panel.</div>
             </div>
           ) : (
-            <div className="utility-panel">
-              <div className="panel-title-row"><span>ACTIVITY</span><button className="mini-icon-button" onClick={() => setActiveActivity('explorer')}><X size={14} /></button></div>
-              <div className="utility-hero-icon"><Zap size={21} /></div>
-              <h3>Workspace ready</h3>
-              <p>{allFilePaths.length} files are available in your local starter workspace.</p>
-              <div className="activity-stat"><span>Last saved</span><strong>{dirty ? 'Unsaved changes' : 'Just now'}</strong></div>
-              <div className="activity-stat"><span>AI agent</span><strong>{activeProviderStatus?.configured ? 'Configured' : 'Setup needed'}</strong></div>
+            <div className="utility-panel activity-feed-panel">
+              <div className="panel-title-row"><span>ACTIVITY</span><button className="mini-icon-button" title="Back to files" onClick={() => setActiveActivity('explorer')}><X size={14} /></button></div>
+              <div className="activity-feed-heading"><div><span>CODEREO AGENT</span><strong>Task history</strong></div><span className="activity-count">{taskHistory.length}</span></div>
+              <p className="activity-feed-description">Recent coding tasks, reviews, verification, and undo checkpoints for this conversation.</p>
+              {taskHistory.length ? <div className="task-history-list">{taskHistory.map((task) => {
+                const labels = { applied: 'Applied', 'needs-attention': 'Needs review', undone: 'Undone', stale: 'Out of date', running: 'In progress', discarded: 'Discarded', 'auto-applied': 'Repair applied', 'apply-failed': 'Save failed', ready: 'Ready to review' };
+                return <button type="button" className="task-history-item" key={task.id} onClick={() => document.getElementById(`assistant-message-${task.id}`)?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>
+                  <span className={`task-history-dot status-${task.state}`} />
+                  <span className="task-history-copy"><strong title={task.prompt}>{task.prompt}</strong><small>{task.files ? `${task.files} file${task.files === 1 ? '' : 's'}` : 'Quest specification'} · {task.time || 'now'}</small></span>
+                  <span className={`task-history-status status-${task.state}`}>{labels[task.state] || 'Ready'}</span>
+                </button>;
+              })}</div> : <div className="activity-empty-state"><div className="utility-hero-icon"><Activity size={21} /></div><strong>No tasks yet</strong><span>Approved coding tasks and their checkpoints will appear here.</span><button className="subtle-button" onClick={() => { setAssistantVisible(true); setAssistantMode('agent'); window.setTimeout(() => chatInputRef.current?.focus(), 30); }}><Sparkles size={13} /> Start a task</button></div>}
+              <div className="activity-feed-footer"><ShieldCheck size={13} /><span>Task history stays in this conversation.</span></div>
             </div>
           )}
         </aside>
@@ -1246,7 +1304,7 @@ function App() {
             <div className="chat-transcript">
               <div className="conversation-date"><span /> TODAY <span /></div>
               {messages.map((message) => (
-                <article key={message.id} className={`chat-message ${message.role === 'user' ? 'user-message' : 'assistant-message'} ${message.error ? 'message-error' : ''}`}>
+                <article key={message.id} id={`assistant-message-${message.id}`} className={`chat-message ${message.role === 'user' ? 'user-message' : 'assistant-message'} ${message.error ? 'message-error' : ''}`}>
                   {message.role === 'assistant' && <div className="message-avatar"><Sparkles size={12} /></div>}
                   <div className="message-content-wrap">
                     <div className="message-meta"><span>{message.role === 'user' ? 'You' : 'Codereo'}</span><time>{message.time}</time></div>
@@ -1291,6 +1349,16 @@ function App() {
                         {message.commands?.length > 0 ? <div className="proposal-check-list"><strong>Checks after approval</strong>{message.commands.map((item) => <div key={item.command}><Terminal size={11} /><code>{item.command}</code></div>)}</div> : <div className="proposal-check-hint">After approval, Codereo will detect safe test/build checks in the project and run them in desktop mode.</div>}
                         {message.blockedCommands?.length > 0 && <div className="blocked-command-note"><strong>Requires explicit approval · never auto-run</strong>{message.blockedCommands.map((command, index) => <div className="blocked-command-row" key={`${command}-${index}`}><code title={command}>{command}</code>{window.codereoDesktop?.runConfirmedCommand ? <button type="button" disabled={assistantBusy || !desktopWorkspaceRoot} title={!desktopWorkspaceRoot ? 'Open a desktop workspace first' : 'Review in the desktop confirmation dialog'} onClick={() => runConfirmedAgentCommand(message.id, command)}>Review &amp; run</button> : <span>Desktop only</span>}</div>)}{message.manualCommandResults?.map((result, index) => <div className="manual-command-result" key={`${result.command}-${index}`}><span className={result.ok ? 'check-pass' : result.canceled ? '' : 'check-fail'}>{result.canceled ? 'Canceled' : result.timedOut ? 'Timed out' : result.ok ? 'Finished' : `Exit ${result.exitCode ?? -1}`}</span><code>{result.command}</code><pre>{result.output || (result.ok ? 'Command completed.' : '')}</pre></div>)}</div>}
                         {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'undone' ? <div className="proposal-result"><RefreshCw size={13} /> Task changes restored to the pre-approval snapshot</div> : message.proposalState === 'stale' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Workspace files changed after review{message.stalePaths?.length ? `: ${message.stalePaths.join(', ')}` : ''}. Request a fresh patch before applying.</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : message.proposalState === 'apply-failed' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> The save could not be confirmed. Inspect the workspace, save it, then request a fresh patch.<button type="button" className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Dismiss</button></div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy || message.changes.length <= (message.excludedChangePaths?.length || 0)} onClick={() => approveAgentTask(message)}><Check size={13} /> {'Approve task & verify'}</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
+                        {message.taskApprovedAt && <section className="task-activity-card">
+                          <button type="button" className="task-activity-toggle" aria-expanded={message.activityOpen !== false} onClick={() => setMessages((current) => current.map((item) => item.id === message.id ? { ...item, activityOpen: item.activityOpen === false } : item))}>
+                            <span><Activity size={13} /> Task activity <small>{createTaskTimeline(message).length} checkpoints</small></span><ChevronDown size={13} className={message.activityOpen === false ? 'collapsed' : ''} />
+                          </button>
+                          {message.activityOpen !== false && <ol className="task-timeline-list">{createTaskTimeline(message).map((event) => <li className={`task-timeline-event timeline-${event.state}`} key={event.id}>
+                            <span className="task-timeline-marker">{event.state === 'error' ? <AlertCircle size={12} /> : event.state === 'undone' ? <RefreshCw size={12} /> : event.state === 'running' ? <LoaderCircle size={12} className="spin" /> : <Check size={12} />}</span>
+                            <span className="task-timeline-copy"><strong>{event.title}</strong><small>{event.detail}</small></span>
+                            {event.time && <time>{event.time}</time>}
+                          </li>)}</ol>}
+                        </section>}
                         {message.verification && <div className={`verification-card ${message.verification.ok ? 'passed' : 'failed'}`}><strong>{message.verification.ok ? 'Verification' : 'Checks need attention'}</strong>{message.verification.message && <p>{message.verification.message}</p>}{(message.verification.results || []).map((result, index) => <div className="verification-result" key={`${result.command}-${index}`}><span className={result.exitCode === 0 ? 'check-pass' : 'check-fail'}>{result.exitCode === 0 ? 'PASS' : 'FAIL'}</span><code>{result.command}</code>{result.output && <pre>{result.output.slice(0, 1600)}</pre>}</div>)}</div>}
                       </div>
                     )}
