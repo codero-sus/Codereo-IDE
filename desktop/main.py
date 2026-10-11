@@ -200,7 +200,7 @@ class IDEWindow(QMainWindow):
         except OSError:
             pass
         self.server_port = self._start_server(dev)
-        self.setWindowTitle('Codereo IDE · Python Desktop')
+        self.setWindowTitle('Codero-IDE · Python Desktop')
         self.setMinimumSize(920, 640)
         self.resize(1512, 960)
         self.setStyleSheet('QMainWindow { background: #101216; } QToolBar { background: #171a1f; border: 0; spacing: 8px; padding: 5px; } QToolBar QToolButton { color: #cbd3c6; padding: 5px 10px; }')
@@ -221,7 +221,7 @@ class IDEWindow(QMainWindow):
     def _start_server(self, dev: bool) -> int:
         node = shutil.which('node')
         if not node:
-            raise RuntimeError('Node.js 20 or newer is required to run the Codereo workspace server.')
+            raise RuntimeError('Node.js 20 or newer is required to run the Codero workspace server.')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
@@ -245,7 +245,7 @@ class IDEWindow(QMainWindow):
         deadline = time.monotonic() + 45
         while time.monotonic() < deadline:
             if self.server.poll() is not None:
-                raise RuntimeError(f'Codereo server exited with code {self.server.returncode}.')
+                raise RuntimeError(f'Codero server exited with code {self.server.returncode}.')
             try:
                 with urlopen(health_url, timeout=1.2) as response:
                     if response.status == 200:
@@ -253,13 +253,13 @@ class IDEWindow(QMainWindow):
             except Exception:
                 time.sleep(0.25)
         self._stop_server()
-        raise RuntimeError('Codereo local server did not become ready in time.')
+        raise RuntimeError('Codero local server did not become ready in time.')
 
     def _ensure_env_file(self) -> Path:
         env_file = self.data_dir / '.env'
         if not env_file.exists():
             env_file.write_text('\n'.join([
-                '# Codereo IDE local AI provider settings',
+                '# Codero-IDE local AI provider settings',
                 'AI_PROVIDER=openai-compatible',
                 'OPENAI_BASE_URL=https://api.openai.com/v1',
                 'OPENAI_MODEL=gpt-4o-mini',
@@ -332,13 +332,14 @@ class IDEWindow(QMainWindow):
 
 def main() -> int:
     app = QApplication(sys.argv)
+    # Preserve the original Qt data-directory identity across the display-name correction.
     app.setOrganizationName('Codereo')
     app.setApplicationName('Codereo IDE')
     dev = '--dev' in sys.argv
     try:
         window = IDEWindow(app, dev=dev)
     except Exception as error:
-        QMessageBox.critical(None, 'Codereo IDE could not start', str(error))
+        QMessageBox.critical(None, 'Codero-IDE could not start', str(error))
         return 1
     window.show()
     return app.exec()

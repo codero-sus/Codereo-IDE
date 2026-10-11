@@ -1,10 +1,10 @@
 {
-  "name": "codereo-ide",
+  "name": "codero-ide",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "desktop/main.cjs",
-  "description": "Codereo IDE — a proprietary, agentic coding workspace.",
+  "description": "Codero-IDE — a proprietary, agentic coding workspace.",
   "scripts": {
     "dev": "node server/index.mjs",
     "build": "vite build",
@@ -39,7 +39,7 @@
   },
   "build": {
     "appId": "ai.codereo.ide",
-    "productName": "Codereo IDE",
+    "productName": "Codero-IDE",
     "asar": true,
     "files": [
       "dist/**",

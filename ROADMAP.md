@@ -1,6 +1,6 @@
-# Codereo IDE — 440-feature direction
+# Codero-IDE — 440-feature direction
 
-Codereo IDE is a proprietary, agent-first coding workspace for browser and desktop. This is a product direction, not a delivery promise or a claim that every item exists today. Items marked **[x]** are in the current foundation; unchecked items are candidates to refine, sequence, or drop with user feedback. Near-term priority is reliable, user-governed edit → test → repair—not maximizing the feature count.
+Codero-IDE is a proprietary, agent-first coding workspace for browser and desktop. This is a product direction, not a delivery promise or a claim that every item exists today. Items marked **[x]** are in the current foundation; unchecked items are candidates to refine, sequence, or drop with user feedback. Near-term priority is reliable, user-governed edit → test → repair—not maximizing the feature count.
 
 ## 01 · Workspaces and projects (20)
 - [x] WS-01 — Start with a ready-to-edit browser workspace.

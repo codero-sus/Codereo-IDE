@@ -14,8 +14,8 @@ const STOPWORDS = new Set([
   'with', 'would', 'your', 'please', 'code', 'file', 'files', 'project', 'repo',
 ]);
 const PROJECT_RULE_FILES = [
-  'AGENTS.md', 'CODEREO.md', '.github/copilot-instructions.md',
-  '.github/instructions/codereo.md',
+  'AGENTS.md', 'CODERO.md', 'CODEREO.md', '.github/copilot-instructions.md',
+  '.github/instructions/codero.md', '.github/instructions/codereo.md',
 ];
 const MANIFEST_FILES = [
   'package.json', 'pyproject.toml', 'requirements.txt', 'Cargo.toml', 'go.mod',

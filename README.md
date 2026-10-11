@@ -1,6 +1,6 @@
-# Codereo IDE
+# Codero-IDE
 
-Codereo IDE is an agentic coding workspace owned by `codero-sus`. This IDE is proprietary/closed-source; no open-source license is added here. Its sibling Codereo-sus projects are open source, as confirmed by the owner.
+Codero-IDE is an agentic coding workspace owned by `codero-sus`. This IDE is proprietary/closed-source; no open-source license is added here. Its sibling Codero-sus projects are open source, as confirmed by the owner.
 
 ## Agentic coding foundation
 
@@ -12,8 +12,8 @@ This first working slice establishes the browser workspace and desktop shell:
 - Agent-first **Ask**, **Plan**, **Agent**, and **Quest** modes with OpenAI-compatible, Anthropic, Gemini, and local Ollama provider profiles. Provider keys stay on the server. Quest returns a bounded goal/requirements/design/acceptance/steps/risks spec alongside a proposed patch; read-only specialists can still return specs without edits.
 - Proposed replacements include bounded per-file line diffs before approval. Choose which files are in the one task approval; excluded files stay out of both the initial patch and automatic repair passes. Applied tasks show file/line totals with Review and Undo; undo checks in-memory and on-disk baselines for later edits and safely removes task-created files. Quest specs and delivery steps can be saved to the existing Mind Desk as a local note and tasks.
 - Task approval gates multi-file agent edits. In desktop mode, one approval can authorize the patch plus allowlisted local test/build checks; the agent can make up to two repair passes. Commands outside that allowlist are never auto-run: the desktop can request separate native confirmation for one plain command at a time (no shell operators or quoting), with a 120-second timeout and bounded output. Browser mode never executes host commands.
-- **Codereo Mind** adapts owner-authorized capabilities from CORTEX/AGI and MyGPT: specialist profiles with capability gates, opt-in local memory recall, persistent notes/tasks/goals, source-linked Wikipedia research, and chat-history import for ChatGPT/Claude/Telegram/WhatsApp/JSONL/CSV/ZIP. Import parsing uses Python's standard library; imported text is not used for training and is sent to a model only when memory recall is explicitly enabled.
-- **Codereo Repo Atlas** builds a local project map from the files already loaded in the workspace: languages, stack manifests, entry points, directory shape, scripts, project guidance, and relative module links. Full-text search finds matching source lines, and assistant context is ranked against the current request instead of taking the first files alphabetically. `.env`, credentials, generated output, and dependencies stay excluded; indexing does not make a network request.
+- **Codero Mind** adapts owner-authorized capabilities from CORTEX/AGI and MyGPT: specialist profiles with capability gates, opt-in local memory recall, persistent notes/tasks/goals, source-linked Wikipedia research, and chat-history import for ChatGPT/Claude/Telegram/WhatsApp/JSONL/CSV/ZIP. Import parsing uses Python's standard library; imported text is not used for training and is sent to a model only when memory recall is explicitly enabled.
+- **Codero Repo Atlas** builds a local project map from the files already loaded in the workspace: languages, stack manifests, entry points, directory shape, scripts, project guidance, and relative module links. Full-text search finds matching source lines, and assistant context is ranked against the current request instead of taking the first files alphabetically. `.env`, credentials, generated output, and dependencies stay excluded; indexing does not make a network request.
 - Python/PySide6 desktop shell that hosts the shared React IDE, exposes a narrow Qt WebChannel bridge for folder open/save and guarded local checks, and keeps workspace file/command permissions in native Python code.
 
 The 400+ advanced-feature direction is captured as 440 scoped items across 22 areas in [ROADMAP.md](ROADMAP.md). It is a multi-phase product direction, not a feature count this initial slice claims to have completed. The current checkout had no application code, so this establishes the foundation to expand from.
@@ -68,9 +68,9 @@ The Node tests cover persistent Mind data, capability filtering, Wikipedia redir
 
 ## Capability sources and scope
 
-The repository owner authorized these open-source companion projects as feature references; Codereo IDE itself remains proprietary and has no open-source license added:
+The repository owner authorized these open-source companion projects as feature references; Codero-IDE itself remains proprietary and has no open-source license added:
 
 - [`codero-sus/agi`, branch `arena/01a0d380-agi` (`cf814aeb`)](https://github.com/codero-sus/agi/tree/arena/01a0d380-agi) — named, capability-scoped agents; research with linked sources; long-term memory, notes, and goals.
 - [`codero-sus/MyGPT`, branch `arena/01a0f6e2-mygpt` (`2a045711`)](https://github.com/codero-sus/MyGPT/tree/arena/01a0f6e2-mygpt) — chat-export parsing, episodic recall, feedback-oriented memory, and local Mind/Growth workflow patterns.
 
-Codereo adapts the useful product capabilities rather than importing either project's model-training runtime. Chat import uses the Python standard-library parser; memory is local and opt-in for provider requests. Wikipedia is the only live research host in this slice. Dynamic skill-code execution, self-modifying skills, and automatic weight training are deliberately not enabled.
+Codero adapts the useful product capabilities rather than importing either project's model-training runtime. Chat import uses the Python standard-library parser; memory is local and opt-in for provider requests. Wikipedia is the only live research host in this slice. Dynamic skill-code execution, self-modifying skills, and automatic weight training are deliberately not enabled.
