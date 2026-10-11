@@ -9,7 +9,7 @@ async function getJson(input) {
   if (initialUrl.origin !== WIKIPEDIA_ORIGIN) throw new Error('Research requests are limited to Wikipedia.');
   const signal = AbortSignal.timeout(8_000);
   const options = {
-    headers: { Accept: 'application/json', 'User-Agent': 'Codereo-IDE/0.1 (local research)' },
+    headers: { Accept: 'application/json', 'User-Agent': 'Codero-IDE/0.1 (local research)' },
     signal,
     redirect: 'manual',
   };

@@ -89,7 +89,7 @@ const DEFAULT_FILES = {
     </button>
     <div class="footnote"><span class="pulse"></span> Local preview, ready when you are</div>
   </main>
-  <footer class="preview-footer"><span>MADE IN CODEREO</span><span id="year"></span></footer>
+  <footer class="preview-footer"><span>MADE IN CODERO-IDE</span><span id="year"></span></footer>
   <script src="/src/main.js"></script>
 </body>
 </html>`,
@@ -296,7 +296,7 @@ function App() {
   const [files, setFiles] = useState(readWorkspace);
   const [savedFiles, setSavedFiles] = useState(readWorkspace);
   const [activeFile, setActiveFile] = useState('index.html');
-  const [workspaceName, setWorkspaceName] = useState('codereo-starter');
+  const [workspaceName, setWorkspaceName] = useState('codero-starter');
   const [desktopWorkspaceRoot, setDesktopWorkspaceRoot] = useState('');
   const [cursorPosition, setCursorPosition] = useState({ line: 1, column: 1 });
   const [pendingSearchLocation, setPendingSearchLocation] = useState(null);
@@ -307,7 +307,7 @@ function App() {
   const [panelTab, setPanelTab] = useState('terminal');
   const [terminalInput, setTerminalInput] = useState('');
   const [terminalLines, setTerminalLines] = useState([
-    { type: 'muted', text: 'Codereo workspace terminal · browser sandbox' },
+    { type: 'muted', text: 'Codero workspace terminal · browser sandbox' },
     { type: 'muted', text: 'Type help to see available read-only commands.' },
   ]);
   const [activeActivity, setActiveActivity] = useState('explorer');
@@ -344,7 +344,7 @@ function App() {
     {
       id: 'welcome',
       role: 'assistant',
-      content: 'Hey, I’m Codereo. I can explain this workspace, plan a change, or prepare a code patch for your review.',
+      content: 'Hey, I’m Codero. I can explain this workspace, plan a change, or prepare a code patch for your review.',
       time: 'now',
       suggestions: ['Explain this project', 'Add a theme toggle', 'Make the landing page more playful'],
     },
@@ -620,7 +620,7 @@ function App() {
     if (verb === 'help') {
       response = [{ type: 'muted', text: 'Read-only commands: help, pwd, ls, cat <file>, clear' }];
     } else if (verb === 'pwd') {
-      response = [{ type: 'normal', text: '/workspace/codereo-starter' }];
+      response = [{ type: 'normal', text: '/workspace/codero-starter' }];
     } else if (verb === 'ls') {
       response = [{ type: 'normal', text: allFilePaths.join('   ') || '(empty workspace)' }];
     } else if (verb === 'cat') {
@@ -700,7 +700,7 @@ function App() {
   const startNewConversation = () => {
     if (assistantBusy) return;
     archiveActiveConversation();
-    setMessages([{ id: `welcome-${crypto.randomUUID()}`, role: 'assistant', content: 'New task ready. Describe the outcome and Codereo will work through the plan, patch, and checks with you.', time: 'now', suggestions: ['Explain this project', 'Fix a bug', 'Build a feature'] }]);
+    setMessages([{ id: `welcome-${crypto.randomUUID()}`, role: 'assistant', content: 'New task ready. Describe the outcome and Codero will work through the plan, patch, and checks with you.', time: 'now', suggestions: ['Explain this project', 'Fix a bug', 'Build a feature'] }]);
     setActiveConversationId('current');
     setAssistantDraft('');
     setAssistantMode('agent');
@@ -1153,7 +1153,7 @@ function App() {
       <header className="topbar">
         <div className="brand-lockup">
           <div className="brand-mark"><Sparkles size={15} strokeWidth={2.4} /></div>
-          <span className="brand-name">codereo</span>
+          <span className="brand-name">codero</span>
           <span className="brand-badge">IDE</span>
         </div>
         <div className="topbar-divider" />
@@ -1187,7 +1187,7 @@ function App() {
             <button className={`activity-button ${activeActivity === 'search' ? 'active' : ''}`} title="Search files" onClick={() => { setActiveActivity('search'); setTimeout(() => document.querySelector('.file-search-input')?.focus(), 0); }}><Search size={19} /></button>
             <button className={`activity-button ${activeActivity === 'source' ? 'active' : ''}`} title="Source control" onClick={() => setActiveActivity('source')}><GitBranch size={19} /></button>
             <button className={`activity-button ${activeActivity === 'activity' ? 'active' : ''}`} title="Workspace activity" onClick={() => setActiveActivity('activity')}><Activity size={19} /></button>
-            <button className={`activity-button ${activeActivity === 'mind' ? 'active' : ''}`} title="Codereo Mind — memory, agents, research" onClick={() => setActiveActivity('mind')}><BrainCircuit size={19} /></button>
+            <button className={`activity-button ${activeActivity === 'mind' ? 'active' : ''}`} title="Codero Mind — memory, agents, research" onClick={() => setActiveActivity('mind')}><BrainCircuit size={19} /></button>
           </div>
           <div className="activity-group activity-bottom">
             <button className="activity-button" title="AI settings" onClick={() => setSettingsOpen(true)}><Settings2 size={19} /></button>
@@ -1218,10 +1218,10 @@ function App() {
               </section>
               <div className="agent-sidebar-footer">
                 <button type="button" onClick={() => { switchToCoding(); setActiveActivity('mind'); }}><BookOpen size={14} /><span>Knowledge Center</span></button>
-                <button type="button" onClick={() => setToast('Sites is planned for a future Codereo release.')}><Globe2 size={14} /><span>Sites</span><small>Beta</small></button>
-                <button type="button" onClick={() => setToast('Automations is planned for a future Codereo release.')}><Activity size={14} /><span>Automations</span></button>
-                <button type="button" onClick={() => setToast('Extensions is planned for a future Codereo release.')}><Braces size={14} /><span>Extensions</span></button>
-                <div className="agent-sidebar-brand"><div className="brand-mark"><Sparkles size={12} /></div><span>Codereo IDE</span><span className="agent-sidebar-user">C</span></div>
+                <button type="button" onClick={() => setToast('Sites is planned for a future Codero release.')}><Globe2 size={14} /><span>Sites</span><small>Beta</small></button>
+                <button type="button" onClick={() => setToast('Automations is planned for a future Codero release.')}><Activity size={14} /><span>Automations</span></button>
+                <button type="button" onClick={() => setToast('Extensions is planned for a future Codero release.')}><Braces size={14} /><span>Extensions</span></button>
+                <div className="agent-sidebar-brand"><div className="brand-mark"><Sparkles size={12} /></div><span>Codero-IDE</span><span className="agent-sidebar-user">C</span></div>
               </div>
             </div>
           ) : (
@@ -1244,7 +1244,7 @@ function App() {
                 <div className="search-files-wrap"><Search size={14} /><input className="file-search-input" value={fileSearch} onChange={(event) => setFileSearch(event.target.value)} placeholder="Search code and paths" /></div>
               )}
               <div className="workspace-folder-row">
-                <ChevronDown size={13} /><span className="workspace-folder-name">CODEREO-STARTER</span>
+                <ChevronDown size={13} /><span className="workspace-folder-name">CODERO-STARTER</span>
                 <button className="mini-icon-button folder-add" title="New file" onClick={createFile}><Plus size={15} /></button>
               </div>
               <div className="file-tree">{filteredTree}</div>
@@ -1270,7 +1270,7 @@ function App() {
           ) : (
             <div className="utility-panel activity-feed-panel">
               <div className="panel-title-row"><span>ACTIVITY</span><button className="mini-icon-button" title="Back to files" onClick={() => setActiveActivity('explorer')}><X size={14} /></button></div>
-              <div className="activity-feed-heading"><div><span>CODEREO AGENT</span><strong>Task history</strong></div><span className="activity-count">{taskHistory.length}</span></div>
+              <div className="activity-feed-heading"><div><span>CODERO AGENT</span><strong>Task history</strong></div><span className="activity-count">{taskHistory.length}</span></div>
               <p className="activity-feed-description">Recent coding tasks, reviews, verification, and undo checkpoints for this conversation.</p>
               {taskHistory.length ? <div className="task-history-list">{taskHistory.map((task) => {
                 const labels = { applied: 'Applied', 'needs-attention': 'Needs review', undone: 'Undone', stale: 'Out of date', running: 'In progress', discarded: 'Discarded', 'auto-applied': 'Repair applied', 'apply-failed': 'Save failed', ready: 'Ready to review' };
@@ -1320,7 +1320,7 @@ function App() {
 
           {viewMode === 'code' ? (
             <section className="code-area">
-              <div className="code-caption"><div className="code-caption-path"><span className="muted-path">codereo-starter</span><ChevronRight size={12} />{activeFile.split('/').map((part, index) => <span key={`${part}-${index}`} className={index === activeFile.split('/').length - 1 ? 'current-path' : 'muted-path'}>{part}</span>)}</div><div className="code-caption-right"><span className="code-language">{(activeFile.split('.').pop() || 'text').toUpperCase()}</span><button className="mini-icon-button" title="Save this file" onClick={saveWorkspace}><ArrowDownToLine size={14} /></button></div></div>
+              <div className="code-caption"><div className="code-caption-path"><span className="muted-path">codero-starter</span><ChevronRight size={12} />{activeFile.split('/').map((part, index) => <span key={`${part}-${index}`} className={index === activeFile.split('/').length - 1 ? 'current-path' : 'muted-path'}>{part}</span>)}</div><div className="code-caption-right"><span className="code-language">{(activeFile.split('.').pop() || 'text').toUpperCase()}</span><button className="mini-icon-button" title="Save this file" onClick={saveWorkspace}><ArrowDownToLine size={14} /></button></div></div>
               <div className="code-editor-wrap">
                 <CodeMirror
                   value={files[activeFile] ?? ''}
@@ -1344,7 +1344,7 @@ function App() {
             <section className="preview-area">
               <div className="preview-toolbar">
                 <div className="preview-device-controls"><button className="device-button active" title="Desktop"><LayoutGrid size={14} /></button><button className="device-button" title="Responsive"><Globe2 size={14} /></button></div>
-                <div className="preview-address"><ShieldCheck size={13} /><span>codereo-preview.local</span><span className="preview-address-path">/</span></div>
+                <div className="preview-address"><ShieldCheck size={13} /><span>codero-preview.local</span><span className="preview-address-path">/</span></div>
                 <button className="mini-icon-button" title="Refresh preview" onClick={runPreview}><RefreshCw size={14} /></button>
                 <button className="mini-icon-button" title="Refresh preview" onClick={runPreview}><Maximize2 size={14} /></button>
               </div>
@@ -1379,7 +1379,7 @@ function App() {
         {assistantVisible && (
           <aside className="assistant-panel">
             <div className="assistant-header">
-              <div className="assistant-title"><div className="assistant-mark"><Sparkles size={14} /></div><div><strong>Codereo Agent</strong><span>Agentic coding partner</span></div></div>
+              <div className="assistant-title"><div className="assistant-mark"><Sparkles size={14} /></div><div><strong>Codero Agent</strong><span>Agentic coding partner</span></div></div>
               <div className="assistant-header-actions">{workspaceMode === 'agent' && <button className="mini-icon-button" title="Switch to Coding workspace" onClick={switchToCoding}><Code2 size={15} /></button>}<button className="mini-icon-button" title="New task" onClick={startNewConversation}><Plus size={15} /></button>{workspaceMode === 'coding' && <button className="mini-icon-button" title="Hide assistant" onClick={() => setAssistantVisible(false)}><PanelRightClose size={15} /></button>}</div>
             </div>
             <div className="assistant-model-row" title="Choose provider in AI settings"><div className={`model-status-dot ${activeProviderStatus?.configured ? 'online' : ''}`} /><span>{activeProviderStatus?.configured ? `${activeProviderMetadata.label} · ${activeProviderStatus.model}` : `${activeProviderMetadata.label} setup required`}</span><ChevronDown size={13} onClick={() => setSettingsOpen(true)} /></div>
@@ -1397,7 +1397,7 @@ function App() {
                 <article key={message.id} id={`assistant-message-${message.id}`} className={`chat-message ${message.role === 'user' ? 'user-message' : 'assistant-message'} ${message.error ? 'message-error' : ''}`}>
                   {message.role === 'assistant' && <div className="message-avatar"><Sparkles size={12} /></div>}
                   <div className="message-content-wrap">
-                    <div className="message-meta"><span>{message.role === 'user' ? 'You' : 'Codereo'}</span><time>{message.time}</time></div>
+                    <div className="message-meta"><span>{message.role === 'user' ? 'You' : 'Codero'}</span><time>{message.time}</time></div>
                     <div className="message-bubble">{message.content}</div>
                     {message.plan?.length > 0 && <ol className="plan-list">{message.plan.map((step, index) => <li key={`${step}-${index}`}>{step}</li>)}</ol>}
                     {message.spec && <section className="quest-spec-card">
@@ -1436,7 +1436,7 @@ function App() {
                             <div className="proposal-diff-lines">{review.lines.map((line, index) => <div className={`proposal-diff-line diff-${line.type}`} key={`${line.type}-${index}`}><span>{line.type === 'added' ? '+' : line.type === 'removed' ? '−' : line.type === 'omitted' ? '…' : ' '}</span><code>{line.type === 'omitted' ? `${line.count} lines omitted` : line.text || ' '}</code></div>)}</div>
                           </section>;
                         })}</div>}
-                        {message.commands?.length > 0 ? <div className="proposal-check-list"><strong>Checks after approval</strong>{message.commands.map((item) => <div key={item.command}><Terminal size={11} /><code>{item.command}</code></div>)}</div> : <div className="proposal-check-hint">After approval, Codereo will detect safe test/build checks in the project and run them in desktop mode.</div>}
+                        {message.commands?.length > 0 ? <div className="proposal-check-list"><strong>Checks after approval</strong>{message.commands.map((item) => <div key={item.command}><Terminal size={11} /><code>{item.command}</code></div>)}</div> : <div className="proposal-check-hint">After approval, Codero will detect safe test/build checks in the project and run them in desktop mode.</div>}
                         {message.blockedCommands?.length > 0 && <div className="blocked-command-note"><strong>Requires explicit approval · never auto-run</strong>{message.blockedCommands.map((command, index) => <div className="blocked-command-row" key={`${command}-${index}`}><code title={command}>{command}</code>{window.codereoDesktop?.runConfirmedCommand ? <button type="button" disabled={assistantBusy || !desktopWorkspaceRoot} title={!desktopWorkspaceRoot ? 'Open a desktop workspace first' : 'Review in the desktop confirmation dialog'} onClick={() => runConfirmedAgentCommand(message.id, command)}>Review &amp; run</button> : <span>Desktop only</span>}</div>)}{message.manualCommandResults?.map((result, index) => <div className="manual-command-result" key={`${result.command}-${index}`}><span className={result.ok ? 'check-pass' : result.canceled ? '' : 'check-fail'}>{result.canceled ? 'Canceled' : result.timedOut ? 'Timed out' : result.ok ? 'Finished' : `Exit ${result.exitCode ?? -1}`}</span><code>{result.command}</code><pre>{result.output || (result.ok ? 'Command completed.' : '')}</pre></div>)}</div>}
                         {message.proposalState === 'applied' || message.proposalState === 'auto-applied' ? <div className="proposal-result applied"><Check size={13} /> {message.proposalState === 'auto-applied' ? 'Repair applied within approved task' : 'Approved task applied'}</div> : message.proposalState === 'discarded' ? <div className="proposal-result">Task discarded</div> : message.proposalState === 'undone' ? <div className="proposal-result"><RefreshCw size={13} /> Task changes restored to the pre-approval snapshot</div> : message.proposalState === 'stale' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Workspace files changed after review{message.stalePaths?.length ? `: ${message.stalePaths.join(', ')}` : ''}. Request a fresh patch before applying.</div> : message.proposalState === 'running' ? <div className="proposal-result"><LoaderCircle size={13} className="spin" /> Applying task and running checks…</div> : message.proposalState === 'needs-attention' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> Applied; review the failing checks below</div> : message.proposalState === 'apply-failed' ? <div className="proposal-result needs-attention"><AlertCircle size={13} /> The save could not be confirmed. Inspect the workspace, save it, then request a fresh patch.<button type="button" className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Dismiss</button></div> : <div className="proposal-actions"><button className="apply-proposal" disabled={assistantBusy || message.changes.length <= (message.excludedChangePaths?.length || 0)} onClick={() => approveAgentTask(message)}><Check size={13} /> {'Approve task & verify'}</button><button className="discard-proposal" disabled={assistantBusy} onClick={() => discardProposal(message.id)}>Discard</button></div>}
                         {message.taskApprovedAt && <section className="task-activity-card">
@@ -1483,7 +1483,7 @@ function App() {
 
       <footer className="statusbar">
         <div className="status-left"><button onClick={() => { setActiveActivity('source'); }}><GitBranch size={12} /> main</button><button title="Workspace sync status"><CircleCheck size={12} /> 0</button><span className="status-sync"><Circle size={8} /> {desktopWorkspaceRoot ? 'Disk workspace' : 'Browser workspace'}</span></div>
-        <div className="status-right"><button onClick={() => { setPanelTab('terminal'); setPanelOpen((current) => !current); }}><SquareTerminal size={12} /> Terminal</button><button onClick={() => setSettingsOpen(true)}><Sparkles size={12} /> {activeProviderStatus?.configured ? 'AI configured' : 'AI setup'}</button><span>Codereo IDE · Preview</span></div>
+        <div className="status-right"><button onClick={() => { setPanelTab('terminal'); setPanelOpen((current) => !current); }}><SquareTerminal size={12} /> Terminal</button><button onClick={() => setSettingsOpen(true)}><Sparkles size={12} /> {activeProviderStatus?.configured ? 'AI configured' : 'AI setup'}</button><span>Codero-IDE · Preview</span></div>
       </footer>
 
       {paletteOpen && (
@@ -1512,7 +1512,7 @@ function App() {
                 return <button key={provider.id} className={`provider-profile ${activeProvider === provider.id ? 'active' : ''}`} onClick={() => selectProvider(provider.id)}><span className="provider-profile-mark">{provider.label.slice(0, 1)}</span><span className="provider-profile-copy"><strong>{provider.label}</strong><small>{status?.configured ? status.model : provider.secret}</small></span><span className={`provider-profile-state ${status?.configured ? 'ready' : ''}`}>{status?.configured ? 'CONFIGURED' : 'SETUP'}</span></button>;
               })}
             </div>
-            <div className="settings-section"><div className="settings-section-heading"><span>{activeProviderMetadata.label.toUpperCase()}</span><span className="settings-tag">SERVER-SIDE ONLY</span></div><p>Set the selected provider values in <code>.env</code> and restart the app. Secrets are not saved to browser storage or sent to Codereo.</p><div className="env-snippet">
+            <div className="settings-section"><div className="settings-section-heading"><span>{activeProviderMetadata.label.toUpperCase()}</span><span className="settings-tag">SERVER-SIDE ONLY</span></div><p>Set the selected provider values in <code>.env</code> and restart the app. Secrets are not saved to browser storage or sent to Codero.</p><div className="env-snippet">
               {activeProvider === 'openai-compatible' && <><div><span>AI_PROVIDER</span><code>openai-compatible</code></div><div><span>OPENAI_BASE_URL</span><code>https://api.openai.com/v1</code></div><div><span>OPENAI_MODEL</span><code>gpt-4o-mini</code></div><div><span>OPENAI_API_KEY</span><code>your-key-here</code></div></>}
               {activeProvider === 'anthropic' && <><div><span>AI_PROVIDER</span><code>anthropic</code></div><div><span>ANTHROPIC_BASE_URL</span><code>https://api.anthropic.com/v1</code></div><div><span>ANTHROPIC_MODEL</span><code>claude-sonnet-4-5</code></div><div><span>ANTHROPIC_API_KEY</span><code>your-key-here</code></div></>}
               {activeProvider === 'gemini' && <><div><span>AI_PROVIDER</span><code>gemini</code></div><div><span>GEMINI_BASE_URL</span><code>generativelanguage.googleapis.com/v1beta</code></div><div><span>GEMINI_MODEL</span><code>gemini-2.5-flash</code></div><div><span>GEMINI_API_KEY</span><code>your-key-here</code></div></>}

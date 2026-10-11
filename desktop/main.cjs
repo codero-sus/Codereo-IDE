@@ -4,6 +4,12 @@ const fs = require('node:fs');
 const fsPromises = require('node:fs/promises');
 const path = require('node:path');
 
+// Keep existing settings and browser storage reachable after the display-name correction.
+const legacyUserDataPath = ['Codereo IDE', 'codereo-ide']
+  .map((name) => path.join(app.getPath('appData'), name))
+  .find((candidate) => fs.existsSync(candidate));
+if (legacyUserDataPath) app.setPath('userData', legacyUserDataPath);
+
 let serverProcess;
 let mainWindow;
 let workspaceRoot = null;
@@ -209,7 +215,7 @@ function startLocalServer() {
   if (!fs.existsSync(envFile)) {
     fs.mkdirSync(path.dirname(envFile), { recursive: true });
     fs.writeFileSync(envFile, [
-      '# Codereo IDE local AI provider settings',
+      '# Codero-IDE local AI provider settings',
       'AI_PROVIDER=openai-compatible',
       'OPENAI_BASE_URL=https://api.openai.com/v1',
       'OPENAI_MODEL=gpt-4o-mini',
@@ -238,7 +244,7 @@ function startLocalServer() {
     stdio: 'inherit',
     windowsHide: true,
   });
-  serverProcess.on('error', (error) => console.error('Codereo local server failed to start:', error));
+  serverProcess.on('error', (error) => console.error('Codero local server failed to start:', error));
   return { port, envFile };
 }
 
@@ -371,7 +377,7 @@ async function waitForServer(url, child) {
   const deadline = Date.now() + 45_000;
   while (Date.now() < deadline) {
     if (child?.exitCode !== null && child?.exitCode !== undefined) {
-      throw new Error(`Codereo local server exited with code ${child.exitCode}.`);
+      throw new Error(`Codero local server exited with code ${child.exitCode}.`);
     }
     try {
       const response = await fetch(`${url}/api/health`, { signal: AbortSignal.timeout(1200) });
@@ -381,7 +387,7 @@ async function waitForServer(url, child) {
     }
     await new Promise((resolve) => setTimeout(resolve, 300));
   }
-  throw new Error('Codereo local server did not become ready in time.');
+  throw new Error('Codero local server did not become ready in time.');
 }
 
 async function createMainWindow() {
@@ -395,7 +401,7 @@ async function createMainWindow() {
     minWidth: 920,
     minHeight: 640,
     backgroundColor: '#101216',
-    title: 'Codereo IDE',
+    title: 'Codero-IDE',
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,

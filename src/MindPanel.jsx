@@ -145,8 +145,8 @@ export default function MindPanel({ files, workspaceName, onOpenFile, selectedAg
 
   return (
     <section className="mind-panel">
-      <div className="panel-title-row mind-title-row"><span><BrainCircuit size={13} /> CODEREO MIND</span><span className="mind-local-label">LOCAL</span></div>
-      <div className="mind-tab-strip" role="tablist" aria-label="Codereo Mind">
+      <div className="panel-title-row mind-title-row"><span><BrainCircuit size={13} /> CODERO MIND</span><span className="mind-local-label">LOCAL</span></div>
+      <div className="mind-tab-strip" role="tablist" aria-label="Codero Mind">
         {tabs.map(({ id, label, icon: Icon, count }) => <button key={id} role="tab" aria-selected={tab === id} className={tab === id ? 'active' : ''} onClick={() => { setTab(id); setError(''); }} title={label}><Icon size={13} /><span>{label}</span>{Number.isFinite(count) && <small>{count}</small>}</button>)}
       </div>
 
@@ -201,7 +201,7 @@ export default function MindPanel({ files, workspaceName, onOpenFile, selectedAg
         {!memoryResults.length && <div className="mind-list-label">RECENT · {state.memoryCount} STORED</div>}
         {!memoryResults.length && state.memories.slice(0, 6).map((memory) => <article className="mind-memory-card" key={memory.id}><div><strong>{memory.title}</strong><button onClick={() => mutate(`/api/mind/memories/${memory.id}`, 'DELETE')} title="Forget this memory"><Trash2 size={12} /></button></div><p>{memory.content}</p><small>{memory.source} · {formatDate(memory.created)}</small></article>)}
         <form className="mind-create-form" onSubmit={saveMemory}><div className="mind-form-title">ADD A MEMORY</div><input value={memoryTitle} onChange={(event) => setMemoryTitle(event.target.value)} placeholder="Short title (optional)" /><textarea value={memoryText} onChange={(event) => setMemoryText(event.target.value)} placeholder="A project fact, decision, or preference to remember" rows={3} /><button disabled={busy || memoryText.trim().length < 3}><Plus size={13} /> Save locally</button></form>
-        <p className="mind-privacy-note">Memory is stored locally by this Codereo server. Nothing is added to model context unless recall is enabled above.</p>
+        <p className="mind-privacy-note">Memory is stored locally by this Codero server. Nothing is added to model context unless recall is enabled above.</p>
       </div>}
 
       {tab === 'agents' && <div className="mind-section">
@@ -230,7 +230,7 @@ export default function MindPanel({ files, workspaceName, onOpenFile, selectedAg
         <label className="mind-file-picker"><input type="file" accept=".json,.jsonl,.csv,.txt,.md,.zip,application/json,text/plain,text/csv,application/zip" onChange={(event) => { setImportFile(event.target.files?.[0] || null); setImportResult(null); }} /><FileUp size={16} /><strong>{importFile?.name || 'Choose a chat export'}</strong><small>ChatGPT · Claude · Telegram · WhatsApp · JSONL · CSV · ZIP · 25 MB max</small></label>
         <button className="mind-primary-button" disabled={busy || !importFile} onClick={importHistory}>{busy ? <LoaderCircle className="spin" size={13} /> : <FileUp size={13} />} Import to local memory</button>
         {importResult && <div className="mind-import-result"><Check size={13} /><span>{importResult.imported} turns · {importResult.threads} threads · {importResult.skipped} skipped</span></div>}
-        <div className="mind-privacy-note">Imported text stays in the local Codereo data folder. It reaches an AI provider only when you turn on <strong>Recall from memory</strong> and send a request.</div>
+        <div className="mind-privacy-note">Imported text stays in the local Codero data folder. It reaches an AI provider only when you turn on <strong>Recall from memory</strong> and send a request.</div>
       </div>}
 
       {busy && <div className="mind-busy-indicator"><LoaderCircle size={12} className="spin" /> Working…</div>}
