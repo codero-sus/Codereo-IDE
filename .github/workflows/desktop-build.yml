@@ -112,33 +112,41 @@ jobs:
           import os
           import subprocess
           from pathlib import Path
-          bundle = next(Path('dist').glob('Codero-IDE*'), None)
-          if bundle is None:
-              raise SystemExit('PyInstaller did not create a Codero-IDE desktop bundle.')
-          server_entry = next(bundle.rglob('server/index.mjs'), None)
-          if server_entry is None:
-              raise SystemExit('Packaged desktop app is missing its local server.')
-          root = server_entry.parents[1]
-          launcher_name = 'Codero-IDE.exe' if os.name == 'nt' else 'Codero-IDE'
-          launcher = next((path for path in bundle.rglob(launcher_name) if path.is_file()), None)
-          if launcher is None:
-              raise SystemExit('Packaged desktop app is missing its native launcher.')
-          required = [root / 'dist' / 'index.html', root / 'node_modules' / 'express' / 'package.json']
-          for path in required:
-              if not path.is_file():
-                  raise SystemExit(f'Packaged desktop app is missing {path.relative_to(root)}.')
-          node = root / 'runtime' / ('node.exe' if os.name == 'nt' else 'node')
-          if not node.is_file():
-              raise SystemExit('Packaged desktop app is missing its bundled Node runtime.')
-          subprocess.run([str(node), '--version'], check=True)
-          helper_name = 'Codero-IDE-ChatImporter.exe' if os.name == 'nt' else 'Codero-IDE-ChatImporter'
-          helper = next(bundle.rglob(helper_name), None)
-          if helper is None:
-              raise SystemExit('Packaged desktop app is missing its bundled chat importer.')
-          parsed = subprocess.run([str(helper), 'smoke.json'], input=b'{"messages":[{"role":"user","content":"hello"}]}', capture_output=True, check=True)
-          if json.loads(parsed.stdout)['turns'] != 1:
-              raise SystemExit('Bundled chat importer failed its smoke test.')
-          print(f'Validated native desktop bundle: {bundle}')
+          try:
+              bundle = next(Path('dist').glob('Codero-IDE*'), None)
+              if bundle is None:
+                  raise RuntimeError('PyInstaller did not create a Codero-IDE desktop bundle.')
+              server_entry = next(bundle.rglob('server/index.mjs'), None)
+              if server_entry is None:
+                  raise RuntimeError(f'Packaged desktop app is missing its local server under {bundle}.')
+              root = server_entry.parents[1]
+              launcher_name = 'Codero-IDE.exe' if os.name == 'nt' else 'Codero-IDE'
+              launcher = next((path for path in bundle.rglob(launcher_name) if path.is_file()), None)
+              if launcher is None:
+                  raise RuntimeError(f'Packaged desktop app is missing its native launcher under {bundle}.')
+              required = [root / 'dist' / 'index.html', root / 'node_modules' / 'express' / 'package.json']
+              for path in required:
+                  if not path.is_file():
+                      raise RuntimeError(f'Packaged desktop app is missing {path}; server entry is {server_entry}.')
+              node = root / 'runtime' / ('node.exe' if os.name == 'nt' else 'node')
+              if not node.is_file():
+                  raise RuntimeError(f'Packaged desktop app is missing its bundled Node runtime at {node}.')
+              node_result = subprocess.run([str(node), '--version'], capture_output=True, text=True)
+              if node_result.returncode:
+                  raise RuntimeError(f'Bundled Node runtime failed ({node_result.returncode}): {node_result.stderr[-2000:]}')
+              helper_name = 'Codero-IDE-ChatImporter.exe' if os.name == 'nt' else 'Codero-IDE-ChatImporter'
+              helper = next(bundle.rglob(helper_name), None)
+              if helper is None:
+                  raise RuntimeError(f'Packaged desktop app is missing its bundled chat importer under {bundle}.')
+              parsed = subprocess.run([str(helper), 'smoke.json'], input=b'{"messages":[{"role":"user","content":"hello"}]}', capture_output=True)
+              if parsed.returncode:
+                  raise RuntimeError(f"Bundled chat importer failed ({parsed.returncode}): {parsed.stderr[-2000:].decode(errors='replace')}")
+              if json.loads(parsed.stdout)['turns'] != 1:
+                  raise RuntimeError('Bundled chat importer produced an unexpected smoke-test result.')
+              print(f'Validated native desktop bundle: {bundle}; resources: {root}')
+          except BaseException as error:
+              print(f'::error title=Packaged app verification::{type(error).__name__}: {error}')
+              raise
           PY
 
       - name: Upload Python desktop app bundle
