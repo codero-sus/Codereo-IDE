@@ -111,11 +111,13 @@ jobs:
           import json
           import os
           import subprocess
+          import sys
           from pathlib import Path
           try:
-              bundle = next(Path('dist').glob('Codero-IDE*'), None)
-              if bundle is None:
-                  raise RuntimeError('PyInstaller did not create a Codero-IDE desktop bundle.')
+              bundle_name = 'Codero-IDE.app' if sys.platform == 'darwin' else 'Codero-IDE'
+              bundle = Path('dist') / bundle_name
+              if not bundle.exists():
+                  raise RuntimeError(f'PyInstaller did not create the expected desktop bundle: {bundle}.')
               server_entry = next(bundle.rglob('server/index.mjs'), None)
               if server_entry is None:
                   raise RuntimeError(f'Packaged desktop app is missing its local server under {bundle}.')
