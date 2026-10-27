@@ -87,7 +87,23 @@ jobs:
           PY
 
       - name: Package the native Python desktop app
-        run: python -m PyInstaller --clean --noconfirm desktop/Codero-IDE.spec
+        shell: bash
+        run: |
+          python - <<'PY'
+          import subprocess
+          import sys
+          result = subprocess.run(
+              [sys.executable, '-m', 'PyInstaller', '--clean', '--noconfirm', 'desktop/Codero-IDE.spec'],
+              capture_output=True,
+              text=True,
+          )
+          print(result.stdout, end='')
+          print(result.stderr, end='', file=sys.stderr)
+          if result.returncode:
+              for line in (result.stdout + '\n' + result.stderr).splitlines()[-30:]:
+                  print(f'::error title=PyInstaller::{line}')
+          raise SystemExit(result.returncode)
+          PY
 
       - name: Verify packaged app and bundled Node runtime
         shell: bash
