@@ -21,10 +21,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os:
-          - ubuntu-24.04
-          - windows-latest
-          - macos-latest
+        os: [ubuntu-24.04, windows-latest, macos-latest]
+
     steps:
       - name: Check out source
         uses: actions/checkout@v7
@@ -100,8 +98,9 @@ jobs:
           print(result.stdout, end='')
           print(result.stderr, end='', file=sys.stderr)
           if result.returncode:
-              for line in (result.stdout + '\n' + result.stderr).splitlines()[-30:]:
-                  print(f'::error title=PyInstaller::{line}')
+              lines = (result.stdout + '\n' + result.stderr).splitlines()
+              detail = ' | '.join(lines[-40:])[-8000:]
+              print(f'::error title=PyInstaller::{detail}')
           raise SystemExit(result.returncode)
           PY
 
@@ -109,6 +108,7 @@ jobs:
         shell: bash
         run: |
           python - <<'PY'
+          import json
           import os
           import subprocess
           from pathlib import Path
@@ -136,7 +136,7 @@ jobs:
           if helper is None:
               raise SystemExit('Packaged desktop app is missing its bundled chat importer.')
           parsed = subprocess.run([str(helper), 'smoke.json'], input=b'{"messages":[{"role":"user","content":"hello"}]}', capture_output=True, check=True)
-          if __import__('json').loads(parsed.stdout)['turns'] != 1:
+          if json.loads(parsed.stdout)['turns'] != 1:
               raise SystemExit('Bundled chat importer failed its smoke test.')
           print(f'Validated native desktop bundle: {bundle}')
           PY
