@@ -140,7 +140,8 @@ jobs:
                   raise RuntimeError(f'Packaged desktop app is missing its bundled chat importer under {bundle}.')
               parsed = subprocess.run([str(helper), 'smoke.json'], input=b'{"messages":[{"role":"user","content":"hello"}]}', capture_output=True)
               if parsed.returncode:
-                  raise RuntimeError(f"Bundled chat importer failed ({parsed.returncode}): {parsed.stderr[-2000:].decode(errors='replace')}")
+                  detail = parsed.stderr[-4000:].decode(errors='replace').replace('\r', '').replace('\n', ' | ')
+                  raise RuntimeError(f'Bundled chat importer failed ({parsed.returncode}): {detail}')
               if json.loads(parsed.stdout)['turns'] != 1:
                   raise RuntimeError('Bundled chat importer produced an unexpected smoke-test result.')
               print(f'Validated native desktop bundle: {bundle}; resources: {root}')
