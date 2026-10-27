@@ -1,0 +1,3 @@
+# Dependencies required to turn the Python/PySide6 desktop app into a bundled app.
+-r requirements-desktop.txt
+PyInstaller>=6.10,<7

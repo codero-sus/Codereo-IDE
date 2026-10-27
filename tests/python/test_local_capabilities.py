@@ -1,15 +1,29 @@
+import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from desktop.local_capabilities import (
     delete_workspace_files,
     load_workspace,
     normalize_confirmed_command,
     normalize_validation_command,
+    project_root,
     safe_relative_path,
     save_workspace,
 )
+
+
+class FrozenAppLayoutTests(unittest.TestCase):
+    def test_project_root_uses_pyinstaller_resource_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            server = root / 'server'
+            server.mkdir()
+            (server / 'index.mjs').write_text('', encoding='utf-8')
+            with patch.object(sys, 'frozen', True, create=True), patch.object(sys, '_MEIPASS', str(root), create=True):
+                self.assertEqual(project_root(), root)
 
 
 class WorkspaceBoundaryTests(unittest.TestCase):

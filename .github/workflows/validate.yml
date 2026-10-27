@@ -1,4 +1,4 @@
-name: Validate and build web app
+name: Validate desktop app
 
 on:
   push:
@@ -11,12 +11,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: validate-${{ github.ref }}
+  group: validate-desktop-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   validate:
-    name: Tests and production smoke test
+    name: Tests and embedded UI smoke test
     runs-on: ubuntu-24.04
     steps:
       - name: Check out source
@@ -33,27 +33,29 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install Node dependencies
         run: npm ci
 
       - name: Run Node tests
         run: npm test
 
-      - name: Run Python tests
+      - name: Run Python desktop tests
         run: npm run test:python
 
       - name: Check JavaScript and Python syntax
         run: |
           node --check server/index.mjs
+          node --check server/chat-import.mjs
           node --check server/research.mjs
           node --check desktop/main.cjs
           node --check desktop/preload.cjs
-          python -m py_compile desktop/main.py desktop/local_capabilities.py python/codereo_capabilities/chat_importer.py
+          python -m py_compile desktop/main.py desktop/local_capabilities.py desktop/chat_importer_cli.py python/codereo_capabilities/chat_importer.py
+          python -c "from pathlib import Path; compile(Path('desktop/Codero-IDE.spec').read_text(encoding='utf-8'), 'desktop/Codero-IDE.spec', 'exec')"
 
-      - name: Build browser app
+      - name: Build UI embedded in the desktop app
         run: npm run build
 
-      - name: Smoke test production server
+      - name: Smoke test the desktop app's local service
         shell: bash
         run: |
           set -euo pipefail
@@ -69,16 +71,9 @@ jobs:
           node --input-type=module -e "
             import fs from 'node:fs';
             const health = JSON.parse(fs.readFileSync('/tmp/codero-health.json', 'utf8'));
-            if (health.ok !== true) throw new Error('Production health endpoint did not report ok.');
-            const page = await fetch('http://127.0.0.1:4173/');
-            if (!page.ok || !(await page.text()).includes('<title>Codero-IDE</title>')) throw new Error('Production app page did not serve the Codero-IDE title.');
-            console.log('Production server health and app page passed.');
+            if (health.ok !== true) throw new Error('Local service health endpoint did not report ok.');
+            const response = await fetch('http://127.0.0.1:4173/');
+            const html = await response.text();
+            if (!response.ok || !html.includes('<title>Codero-IDE</title>')) throw new Error('Embedded desktop UI failed its production smoke test.');
+            console.log('Desktop local service and embedded UI passed.');
           "
-
-      - name: Upload browser build
-        uses: actions/upload-artifact@v7
-        with:
-          name: codero-ide-web
-          path: dist/
-          if-no-files-found: error
-          retention-days: 14

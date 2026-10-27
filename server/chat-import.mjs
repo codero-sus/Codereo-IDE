@@ -7,6 +7,7 @@ const MAX_OUTPUT = 16_000_000;
 export function parseChatExport({ root, filename, data }) {
   if (!Buffer.isBuffer(data) || data.length > MAX_INPUT) return Promise.reject(new Error('Import is limited to 25 MB.'));
   const importer = process.env.CODEREO_CHAT_IMPORTER || path.join(root, 'python', 'codereo_capabilities', 'chat_importer.py');
+  const bundledImporter = process.env.CODEREO_CHAT_IMPORTER_EXECUTABLE;
   const python = process.env.CODEREO_PYTHON || process.env.PYTHON || (process.platform === 'win32' ? 'python' : 'python3');
   return new Promise((resolve, reject) => {
     const env = {
@@ -19,8 +20,13 @@ export function parseChatExport({ root, filename, data }) {
       TMP: process.env.TMP || '',
       PYTHONUTF8: '1',
       PYTHONIOENCODING: 'utf-8',
+      CODEREO_CHAT_IMPORTER_EXECUTABLE: bundledImporter || '',
     };
-    const child = spawn(python, [importer, path.basename(filename)], { env, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
+    const child = spawn(
+      bundledImporter || python,
+      bundledImporter ? [path.basename(filename)] : [importer, path.basename(filename)],
+      { env, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true },
+    );
     let stdout = '';
     let stderr = '';
     let settled = false;
@@ -38,7 +44,7 @@ export function parseChatExport({ root, filename, data }) {
       } else stdout += chunk.toString('utf8');
     });
     child.stderr.on('data', (chunk) => { if (stderr.length < 2_000) stderr += chunk.toString('utf8').slice(0, 2_000 - stderr.length); });
-    child.on('error', (error) => fail(Object.assign(new Error(`Python chat import is unavailable: ${error.message}`), { code: 'PYTHON_UNAVAILABLE' })));
+    child.on('error', (error) => fail(Object.assign(new Error(`Chat import parser is unavailable: ${error.message}`), { code: 'PYTHON_UNAVAILABLE' })));
     child.on('close', (code) => {
       if (settled) return;
       if (code !== 0) return fail(new Error(stderr.trim() || 'The chat export could not be parsed.'));

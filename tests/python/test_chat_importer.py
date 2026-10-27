@@ -1,5 +1,6 @@
 import io
 import json
+import subprocess
 import sys
 import unittest
 import zipfile
@@ -22,6 +23,20 @@ class ChatImportTests(unittest.TestCase):
         self.assertEqual(len(threads), 1)
         self.assertEqual(threads[0].title, 'A saved conversation')
         self.assertEqual([turn.role for turn in threads[0].turns], ['user', 'agi'])
+
+    def test_bundled_importer_cli_emits_bounded_json(self):
+        root = Path(__file__).resolve().parents[2]
+        command = [sys.executable, str(root / 'desktop' / 'chat_importer_cli.py'), 'export.json']
+        result = subprocess.run(
+            command,
+            input=b'{"messages":[{"role":"user","content":"desktop import"}]}',
+            capture_output=True,
+            cwd=root,
+            check=True,
+        )
+        parsed = json.loads(result.stdout)
+        self.assertEqual(parsed['turns'], 1)
+        self.assertEqual(parsed['threads'][0]['turns'][0]['content'], 'desktop import')
 
     def test_jsonl_and_whatsapp_text_parse(self):
         jsonl = b'{"role":"user","content":"one"}\n{"role":"assistant","content":"two"}'

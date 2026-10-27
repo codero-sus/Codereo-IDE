@@ -1,4 +1,4 @@
-name: Build desktop installers
+name: Build Python desktop app
 
 on:
   push:
@@ -10,14 +10,14 @@ permissions:
   contents: read
 
 concurrency:
-  group: desktop-build-${{ github.ref }}
+  group: python-desktop-build-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
   package:
-    name: Package on ${{ matrix.os }}
+    name: PySide6 app on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -29,22 +29,106 @@ jobs:
       - name: Check out source
         uses: actions/checkout@v7
 
-      - name: Set up Node.js
+      - name: Set up Node.js for the local app service
         uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Set up Python for the native desktop shell
+        uses: actions/setup-python@v7
+        with:
+          python-version: '3.11'
+          cache: pip
+          cache-dependency-path: requirements-desktop-build.txt
 
-      - name: Build desktop installer
-        run: npm run desktop:electron:package
+      - name: Install Linux Qt WebEngine libraries
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libasound2t64 libdbus-1-3 libegl1 libgbm1 libgl1 libnss3 libx11-xcb1 libxcb-cursor0 libxcb-icccm4 libxcb-keysyms1 libxcb-render-util0 libxcb-shape0 libxcb-xinerama0 libxcb-xkb1 libxcomposite1 libxcursor1 libxi6 libxkbcommon-x11-0 libxrandr2 libxss1
 
-      - name: Upload installer artifact
+      - name: Install Node dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build interface embedded in the desktop app
+        run: npm run build
+
+      - name: Keep only Node runtime dependencies
+        run: npm ci --omit=dev --ignore-scripts
+
+      - name: Install PySide6 and PyInstaller
+        run: python -m pip install -r requirements-desktop-build.txt
+
+      - name: Select the bundled Node runtime
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          node = subprocess.check_output(['node', '-p', 'process.execPath'], text=True).strip()
+          with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as env_file:
+              env_file.write(f'CODERO_NODE_BINARY={node}\n')
+          print(f'Bundling Node runtime: {node}')
+          PY
+
+      - name: Remove previous app bundle output
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import shutil
+          output = Path('dist')
+          for candidate in output.glob('Codero-IDE*'):
+              if candidate.is_dir():
+                  shutil.rmtree(candidate)
+              else:
+                  candidate.unlink()
+          PY
+
+      - name: Package the native Python desktop app
+        run: python -m PyInstaller --clean --noconfirm desktop/Codero-IDE.spec
+
+      - name: Verify packaged app and bundled Node runtime
+        shell: bash
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+          bundle = next(Path('dist').glob('Codero-IDE*'), None)
+          if bundle is None:
+              raise SystemExit('PyInstaller did not create a Codero-IDE desktop bundle.')
+          server_entry = next(bundle.rglob('server/index.mjs'), None)
+          if server_entry is None:
+              raise SystemExit('Packaged desktop app is missing its local server.')
+          root = server_entry.parents[1]
+          launcher_name = 'Codero-IDE.exe' if os.name == 'nt' else 'Codero-IDE'
+          launcher = next((path for path in bundle.rglob(launcher_name) if path.is_file()), None)
+          if launcher is None:
+              raise SystemExit('Packaged desktop app is missing its native launcher.')
+          required = [root / 'dist' / 'index.html', root / 'node_modules' / 'express' / 'package.json', root / 'python' / 'codereo_capabilities' / 'chat_importer.py']
+          for path in required:
+              if not path.is_file():
+                  raise SystemExit(f'Packaged desktop app is missing {path.relative_to(root)}.')
+          node = root / 'runtime' / ('node.exe' if os.name == 'nt' else 'node')
+          if not node.is_file():
+              raise SystemExit('Packaged desktop app is missing its bundled Node runtime.')
+          subprocess.run([str(node), '--version'], check=True)
+          helper_name = 'Codero-IDE-ChatImporter.exe' if os.name == 'nt' else 'Codero-IDE-ChatImporter'
+          helper = next(bundle.rglob(helper_name), None)
+          if helper is None:
+              raise SystemExit('Packaged desktop app is missing its bundled chat importer.')
+          parsed = subprocess.run([str(helper), 'smoke.json'], input=b'{"messages":[{"role":"user","content":"hello"}]}', capture_output=True, check=True)
+          if __import__('json').loads(parsed.stdout)['turns'] != 1:
+              raise SystemExit('Bundled chat importer failed its smoke test.')
+          print(f'Validated native desktop bundle: {bundle}')
+          PY
+
+      - name: Upload Python desktop app bundle
         uses: actions/upload-artifact@v7
         with:
           name: codero-ide-${{ runner.os }}-${{ runner.arch }}
-          path: release/*
+          path: dist/Codero-IDE*
           if-no-files-found: error
           retention-days: 14

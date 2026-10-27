@@ -1,10 +1,10 @@
 # Codero-IDE
 
-Codero-IDE is an agentic coding workspace owned by `codero-sus`. This IDE is proprietary/closed-source; no open-source license is added here. Its sibling Codero-sus projects are open source, as confirmed by the owner.
+Codero-IDE is a proprietary desktop coding app built with Python, PySide6/Qt WebEngine, and a local Node service. Its React interface runs inside the native desktop window; an optional browser preview is provided for development. The project is owned by `codero-sus`, and no open-source license is added here.
 
 ## Agentic coding foundation
 
-This first working slice establishes the browser workspace and desktop shell:
+The primary product is the native Python/PySide6 desktop application; its embedded interface provides the following agentic coding foundation:
 
 - Dark, responsive IDE layout with file explorer, tabs, syntax-highlighted editor, command palette, status bar, and keyboard shortcuts.
 - Local starter workspace persisted in the current browser. The starter HTML/CSS/JavaScript app runs in a sandboxed preview iframe.
@@ -18,7 +18,7 @@ This first working slice establishes the browser workspace and desktop shell:
 
 The 400+ advanced-feature direction is captured as 440 scoped items across 22 areas in [ROADMAP.md](ROADMAP.md). It is a multi-phase product direction, not a feature count this initial slice claims to have completed. The current checkout had no application code, so this establishes the foundation to expand from.
 
-## Run in a browser
+## Optional browser preview for development
 
 Requires Node.js 20 or newer.
 
@@ -44,7 +44,7 @@ Restart `npm run dev` after changing the environment. Provider keys are read onl
 
 ## Desktop
 
-The selected desktop UI is **Python 3.11+ with PySide6/Qt WebEngine**. It hosts the same React IDE used in the browser, while native Python owns folder access and command approvals.
+The product is the **Python 3.11+ / PySide6 desktop app**. Qt WebEngine hosts its interface inside a native window; Python owns folder access, project checks, and command approvals.
 
 ```sh
 npm install
@@ -52,18 +52,18 @@ python -m pip install -r requirements-desktop.txt
 npm run desktop
 ```
 
-`npm run desktop` builds the browser bundle, starts the local Node API on a loopback port, and opens the Python/Qt window. For a hot-reload desktop session, run `npm run desktop:dev`. Use the project selector (or File → Open project folder) to choose a workspace. Text files are loaded and written through a constrained Qt WebChannel bridge; `.env`, credentials, binaries, symlinks, and large/dependency folders are excluded. Provider settings and Mind data live in the OS application-data directory. Out-of-allowlist commands require a native confirmation dialog.
+`npm run desktop` builds the interface embedded inside the app, starts the local Node service on a loopback port, and opens the Python/Qt window. For a hot-reload desktop session, run `npm run desktop:dev`. Use the project selector (or File → Open project folder) to choose a workspace. Text files are loaded and written through a constrained Qt WebChannel bridge; `.env`, credentials, binaries, symlinks, and large/dependency folders are excluded. Provider settings and Mind data live in the OS application-data directory. Out-of-allowlist commands require a native confirmation dialog.
 
-A legacy Electron shell is retained as an optional development fallback with `npm run desktop:electron`. The Python/Qt shell currently runs from a source checkout; installer packaging for that shell is not configured.
+The GitHub desktop workflow bundles this Python/PySide6 app with PyInstaller, including a Node runtime, production Node dependencies, and a standalone chat-import helper, so the resulting app bundle does not require a separate Node or Python installation. A legacy Electron shell remains available only as a development fallback with `npm run desktop:electron`.
 
 ## GitHub Actions builds
 
 The workflows in `.github/workflows/` run on pushes to `arena/01a0f772-codereo-ide` (and validation also runs for pull requests):
 
-- **Validate and build web app** runs Node and Python tests, syntax checks, a production build, and an HTTP smoke test. It uploads the browser bundle as the `codero-ide-web` artifact.
-- **Build desktop installers** packages the optional Electron shell on Linux, Windows, and macOS, then uploads one installer artifact per platform. It runs after a push to the working branch; manual dispatch is available once the workflow is present on the repository's default branch.
+- **Validate desktop app** runs Node and Python tests, syntax checks, builds the interface embedded in the desktop window, and smoke-tests the local service.
+- **Build Python desktop app** uses PyInstaller to package the native PySide6/Qt WebEngine application with its local Node service and Node runtime on Linux, Windows, and macOS. It uploads a platform-specific `codero-ide-*` bundle after each working-branch push; manual dispatch is available once the workflow is present on the repository's default branch.
 
-Artifacts are retained for 14 days. Desktop packages are unsigned CI builds, not published releases; code signing and notarization are not configured.
+Desktop bundles are unsigned CI builds, not published releases; code signing and notarization are not configured. Artifacts are retained for 14 days.
 
 ## Development checks
 

@@ -219,13 +219,31 @@ class IDEWindow(QMainWindow):
         self.statusBar().showMessage('Private local workspace · Python / PySide6')
 
     def _start_server(self, dev: bool) -> int:
-        node = shutil.which('node')
+        bundled_node = self.root / 'runtime' / ('node.exe' if os.name == 'nt' else 'node')
+        node = str(bundled_node) if bundled_node.is_file() else shutil.which('node')
         if not node:
-            raise RuntimeError('Node.js 20 or newer is required to run the Codero workspace server.')
+            raise RuntimeError('The bundled Node runtime is missing. Reinstall Codero-IDE or add Node.js 20+ to PATH.')
         with socket.socket() as sock:
             sock.bind(('127.0.0.1', 0))
             port = sock.getsockname()[1]
         env = dict(os.environ)
+        if getattr(sys, 'frozen', False):
+            # PyInstaller adjusts dynamic-library paths for Qt. The bundled Node
+            # child must use the host paths rather than loading Qt's private libs.
+            for variable in ('LD_LIBRARY_PATH', 'DYLD_LIBRARY_PATH'):
+                original = env.get(f'{variable}_ORIG')
+                if original is not None:
+                    env[variable] = original
+            helper_name = 'Codero-IDE-ChatImporter.exe' if os.name == 'nt' else 'Codero-IDE-ChatImporter'
+            helper_candidates = (
+                Path(sys.executable).resolve().parent / helper_name,
+                self.root / helper_name,
+                self.root / 'runtime' / helper_name,
+                self.root.parent / helper_name,
+            )
+            helper = next((candidate for candidate in helper_candidates if candidate.is_file()), None)
+            if helper:
+                env['CODEREO_CHAT_IMPORTER_EXECUTABLE'] = str(helper)
         env.update({
             'HOST': '127.0.0.1',
             'PORT': str(port),

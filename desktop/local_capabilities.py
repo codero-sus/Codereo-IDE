@@ -4,6 +4,7 @@ import os
 import re
 import signal
 import subprocess
+import sys
 import threading
 from pathlib import Path
 from typing import Any
@@ -28,6 +29,14 @@ SAFE_VALIDATION_COMMANDS = {
 
 
 def project_root() -> Path:
+    if getattr(sys, 'frozen', False):
+        bundle_root = Path(getattr(sys, '_MEIPASS', Path(sys.executable).resolve().parent)).resolve()
+        if (bundle_root / 'server' / 'index.mjs').is_file():
+            return bundle_root
+        executable_root = Path(sys.executable).resolve().parent
+        if (executable_root / 'server' / 'index.mjs').is_file():
+            return executable_root
+        return bundle_root
     return Path(__file__).resolve().parents[1]
 
 

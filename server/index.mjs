@@ -313,7 +313,7 @@ app.post('/api/mind/import', express.raw({ type: 'application/octet-stream', lim
     res.status(201).json({ ok: true, filename, ...result, memoryCount: mindStore.data.memories.length });
   } catch (error) {
     const unavailable = error.code === 'PYTHON_UNAVAILABLE';
-    res.status(unavailable ? 503 : 422).json({ error: unavailable ? 'PYTHON_UNAVAILABLE' : 'IMPORT_FAILED', message: unavailable ? 'Python 3 is needed for chat-export parsing. Install Python 3 and retry.' : error.message || 'The chat export could not be imported.' });
+    res.status(unavailable ? 503 : 422).json({ error: unavailable ? 'PYTHON_UNAVAILABLE' : 'IMPORT_FAILED', message: unavailable ? 'The chat parser could not start. Reinstall Codero-IDE or install Python 3 for source development.' : error.message || 'The chat export could not be imported.' });
   }
 });
 
