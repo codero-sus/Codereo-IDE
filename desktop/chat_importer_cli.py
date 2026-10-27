@@ -7,9 +7,9 @@ import sys
 from pathlib import Path
 
 bundle_root = Path(getattr(sys, '_MEIPASS', Path(__file__).resolve().parents[1])).resolve()
-sys.path.insert(0, str(bundle_root))
+sys.path.insert(0, str(bundle_root / 'python'))
 
-from python.codereo_capabilities.chat_importer import MAX_BYTES, MAX_MSGS, parse
+from codereo_capabilities.chat_importer import MAX_BYTES, MAX_MSGS, parse
 
 
 def main() -> int:

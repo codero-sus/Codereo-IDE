@@ -59,7 +59,7 @@ exe = EXE(
 )
 parser_analysis = Analysis(
     [str(root / 'desktop' / 'chat_importer_cli.py')],
-    pathex=[str(root)],
+    pathex=[str(root / 'python')],
     binaries=[],
     datas=[],
     hiddenimports=[],
