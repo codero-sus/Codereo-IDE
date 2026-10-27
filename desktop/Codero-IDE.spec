@@ -15,7 +15,10 @@ for directory in ('dist', 'server', 'node_modules', 'python'):
     source = root / directory
     if not source.is_dir():
         raise SystemExit(f'Missing desktop bundle input: {source}')
-    datas += Tree(str(source), prefix=directory)
+    datas.extend(
+        (source_path, Path(target_path).parent.as_posix())
+        for target_path, source_path, _typecode in Tree(str(source), prefix=directory)
+    )
 datas.append((str(root / 'package.json'), '.'))
 
 analysis = Analysis(
