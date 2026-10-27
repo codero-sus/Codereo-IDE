@@ -123,7 +123,7 @@ jobs:
           launcher = next((path for path in bundle.rglob(launcher_name) if path.is_file()), None)
           if launcher is None:
               raise SystemExit('Packaged desktop app is missing its native launcher.')
-          required = [root / 'dist' / 'index.html', root / 'node_modules' / 'express' / 'package.json', root / 'python' / 'codereo_capabilities' / 'chat_importer.py']
+          required = [root / 'dist' / 'index.html', root / 'node_modules' / 'express' / 'package.json']
           for path in required:
               if not path.is_file():
                   raise SystemExit(f'Packaged desktop app is missing {path.relative_to(root)}.')

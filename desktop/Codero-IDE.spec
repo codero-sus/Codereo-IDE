@@ -11,7 +11,7 @@ node_binary = Path(os.environ['CODERO_NODE_BINARY']).resolve(strict=True)
 # The Python desktop shell starts its bundled Node API locally. Keep its server,
 # production UI, Python importer, and production-only npm dependencies beside it.
 datas = []
-for directory in ('dist', 'server', 'node_modules', 'python'):
+for directory in ('dist', 'server', 'node_modules'):
     source = root / directory
     if not source.is_dir():
         raise SystemExit(f'Missing desktop bundle input: {source}')
