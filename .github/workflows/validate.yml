@@ -1,0 +1,84 @@
+name: Validate and build web app
+
+on:
+  push:
+    branches:
+      - arena/01a0f772-codereo-ide
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: validate-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    name: Tests and production smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Node tests
+        run: npm test
+
+      - name: Run Python tests
+        run: npm run test:python
+
+      - name: Check JavaScript and Python syntax
+        run: |
+          node --check server/index.mjs
+          node --check server/research.mjs
+          node --check desktop/main.cjs
+          node --check desktop/preload.cjs
+          python -m py_compile desktop/main.py desktop/local_capabilities.py python/codereo_capabilities/chat_importer.py
+
+      - name: Build browser app
+        run: npm run build
+
+      - name: Smoke test production server
+        shell: bash
+        run: |
+          set -euo pipefail
+          HOST=127.0.0.1 PORT=4173 NODE_ENV=production node server/index.mjs --production &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:4173/api/health > /tmp/codero-health.json; then
+              break
+            fi
+            sleep 1
+          done
+          node --input-type=module -e "
+            import fs from 'node:fs';
+            const health = JSON.parse(fs.readFileSync('/tmp/codero-health.json', 'utf8'));
+            if (health.ok !== true) throw new Error('Production health endpoint did not report ok.');
+            const page = await fetch('http://127.0.0.1:4173/');
+            if (!page.ok || !(await page.text()).includes('<title>Codero-IDE</title>')) throw new Error('Production app page did not serve the Codero-IDE title.');
+            console.log('Production server health and app page passed.');
+          "
+
+      - name: Upload browser build
+        uses: actions/upload-artifact@v4
+        with:
+          name: codero-ide-web
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14

@@ -54,7 +54,16 @@ npm run desktop
 
 `npm run desktop` builds the browser bundle, starts the local Node API on a loopback port, and opens the Python/Qt window. For a hot-reload desktop session, run `npm run desktop:dev`. Use the project selector (or File → Open project folder) to choose a workspace. Text files are loaded and written through a constrained Qt WebChannel bridge; `.env`, credentials, binaries, symlinks, and large/dependency folders are excluded. Provider settings and Mind data live in the OS application-data directory. Out-of-allowlist commands require a native confirmation dialog.
 
-A legacy Electron shell is retained as an optional development fallback with `npm run desktop:electron`. Python/Qt installer packaging is not yet configured; the desktop command currently runs from a source checkout with Node.js available.
+A legacy Electron shell is retained as an optional development fallback with `npm run desktop:electron`. The Python/Qt shell currently runs from a source checkout; installer packaging for that shell is not configured.
+
+## GitHub Actions builds
+
+The workflows in `.github/workflows/` run on pushes to `arena/01a0f772-codereo-ide` (and validation also runs for pull requests):
+
+- **Validate and build web app** runs Node and Python tests, syntax checks, a production build, and an HTTP smoke test. It uploads the browser bundle as the `codero-ide-web` artifact.
+- **Build desktop installers** packages the optional Electron shell on Linux, Windows, and macOS, then uploads one installer artifact per platform. It runs after a push to the working branch; manual dispatch is available once the workflow is present on the repository's default branch.
+
+Artifacts are retained for 14 days. Desktop packages are unsigned CI builds, not published releases; code signing and notarization are not configured.
 
 ## Development checks
 
